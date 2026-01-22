@@ -1,0 +1,33 @@
+CLAUDE.md
+GEMINI.md
+# Nix build outputs
+result
+result-*
+
+# Node.js (if any tooling)
+node_modules/
+package.json
+package-lock.json
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Claude Code
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets (never commit)
+secrets/
+*.age
+*.key
+
+# Accidental files
+mkdir
+npm
