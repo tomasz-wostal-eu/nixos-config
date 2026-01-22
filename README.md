@@ -1,38 +1,47 @@
 # nixos-config
 
-Personal NixOS and nix-darwin configuration using Nix Flakes.
+Personal NixOS and macOS configuration using Nix Flakes.
 
 ## Platforms
 
-- **NixOS** (aarch64-linux) - UTM virtual machine
-- **macOS** (aarch64-darwin) - Apple Silicon via nix-darwin
+- **NixOS:** x86_64-linux, aarch64-linux (UTM/QEMU VM)
+- **macOS:** aarch64-darwin, x86_64-darwin (via nix-darwin)
 
 ## Usage
 
-### NixOS
-
 ```bash
-sudo nixos-rebuild switch --flake .#nixos
-```
+# Build and switch (auto-detects platform)
+nix run .#build-switch
 
-### macOS
-
-```bash
-nix run nix-darwin -- switch --flake .#mbp
-```
-
-### Update inputs
-
-```bash
+# Update flake inputs
 nix flake update
+
+# Clean old generations
+nix run .#clean
 ```
 
 ## Structure
 
 ```
 flake.nix              # Entry point
-hosts/
-  nixos-utm/           # NixOS system configuration
-  darwin/              # macOS system configuration
-twostal.nix            # Shared Home Manager config
+├── hosts/
+│   ├── nixos/         # NixOS configuration
+│   └── darwin/        # macOS configuration
+├── modules/
+│   ├── nixos/         # NixOS-specific modules
+│   ├── darwin/        # macOS-specific modules
+│   └── shared/        # Shared configuration
+└── apps/              # Helper scripts
 ```
+
+## Features
+
+- Zsh with oh-my-zsh, starship prompt, atuin history
+- LazyVim (Neovim) with LSP support
+- Catppuccin Macchiato theme
+- Ghostty terminal
+- tmux with custom keybindings
+
+## Credits
+
+Based on [dustinlyons/nixos-config](https://github.com/dustinlyons/nixos-config).

@@ -22,7 +22,6 @@ with pkgs; [
   docker-compose
 
   # Media-related packages
-  emacs-all-the-icons-fonts
   dejavu_fonts
   fd
   font-awesome

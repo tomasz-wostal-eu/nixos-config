@@ -1,34 +1,37 @@
 { user, config, pkgs, ... }:
 
-let
-  xdg_configHome = "${config.users.users.${user}.home}/.config";
-  xdg_dataHome   = "${config.users.users.${user}.home}/.local/share";
-  xdg_stateHome  = "${config.users.users.${user}.home}/.local/state"; in
 {
+  ".config/ghostty/config".text = ''
+    theme = catppuccin-macchiato
+    font-family = JetBrainsMono Nerd Font
+    font-size = 12
+    background-blur-radius = 20
+    mouse-hide-while-typing = true
+    window-decoration = true
+    keybind = shift+enter=text:\x1b\r
+  '';
 
-  # Raycast script so that "Run Emacs" is available and uses Emacs daemon
-  "${xdg_dataHome}/bin/emacsclient" = {
-    executable = true;
-    text = ''
-      #!/bin/zsh
-      #
-      # Required parameters:
-      # @raycast.schemaVersion 1
-      # @raycast.title Run Emacs
-      # @raycast.mode silent
-      #
-      # Optional parameters:
-      # @raycast.packageName Emacs
-      # @raycast.icon ${xdg_dataHome}/img/icons/Emacs.icns
-      # @raycast.iconDark ${xdg_dataHome}/img/icons/Emacs.icns
-
-      if [[ $1 = "-t" ]]; then
-        # Terminal mode
-        ${pkgs.emacs}/bin/emacsclient -t $@
-      else
-        # GUI mode
-        ${pkgs.emacs}/bin/emacsclient -c -n $@
-      fi
-    '';
-  };
+  ".config/ghostty/themes/catppuccin-macchiato".text = ''
+    palette = 0=#494d64
+    palette = 1=#ed8796
+    palette = 2=#a6da95
+    palette = 3=#eed49f
+    palette = 4=#8aadf4
+    palette = 5=#f5bde6
+    palette = 6=#8bd5ca
+    palette = 7=#b8c0e0
+    palette = 8=#5b6078
+    palette = 9=#ed8796
+    palette = 10=#a6da95
+    palette = 11=#eed49f
+    palette = 12=#8aadf4
+    palette = 13=#f5bde6
+    palette = 14=#8bd5ca
+    palette = 15=#a5adcb
+    background = 24273a
+    foreground = cad3f5
+    cursor-color = f4dbd6
+    selection-background = 5b6078
+    selection-foreground = cad3f5
+  '';
 }

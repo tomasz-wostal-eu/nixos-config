@@ -1,4 +1,3 @@
-CLAUDE.md
 GEMINI.md
 # Nix build outputs
 result
@@ -31,3 +30,4 @@ secrets/
 # Accidental files
 mkdir
 npm
+CLAUDE.md
