@@ -20,6 +20,9 @@ with pkgs; [
   # Cloud-related tools and SDKs
   docker
   docker-compose
+  bitwarden-desktop
+  bitwarden-cli
+  lens
 
   # Media-related packages
   dejavu_fonts
@@ -42,7 +45,15 @@ with pkgs; [
   tree
   tmux
   unzip
-  zsh-powerlevel10k
+  unimatrix
+  xh
+  curlie
+  httpie
+  posting
+  age
+  sshs
+  tshark
+  termshark
   
   # Development tools
   curl
