@@ -22,7 +22,6 @@ with pkgs; [
   docker-compose
   bitwarden-desktop
   bitwarden-cli
-  lens
 
   # Media-related packages
   dejavu_fonts
