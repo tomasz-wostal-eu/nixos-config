@@ -150,6 +150,17 @@ in
     keyMode = "vi";
     terminal = "tmux-256color";
     plugins = with pkgs.tmuxPlugins; [
+      {
+        plugin = catppuccin;
+        extraConfig = ''
+          set -g @catppuccin_flavor "macchiato"
+          set -g @catppuccin_window_status_style "rounded"
+          set -g @catppuccin_status_background "default"
+          set -g @catppuccin_window_text " #W"
+          set -g @catppuccin_window_current_text " #W"
+          set -g @catppuccin_date_time_text " %d/%m %H:%M"
+        '';
+      }
       sensible
       yank
       resurrect
@@ -168,8 +179,12 @@ in
       set -g detach-on-destroy off
       set -g renumber-windows on
       set -g set-clipboard on
-      set -ga terminal-overrides ",xterm-256color:Tc"
-      set -ga terminal-overrides ",tmux-256color:Tc"
+      set -as terminal-features ",xterm-256color:RGB"
+      set -as terminal-features ",xterm-ghostty:RGB"
+      set -ag terminal-overrides ",xterm-256color:Tc"
+      set -ag terminal-overrides ",tmux-256color:Tc"
+      set -ag terminal-overrides ",xterm-ghostty:Tc"
+      set-environment -g COLORTERM truecolor
       set -g pane-active-border-style 'fg=magenta,bg=default'
       set -g pane-border-style 'fg=brightblack,bg=default'
       bind r command-prompt -p "rename window:" "rename-window '%%'"
@@ -196,12 +211,11 @@ in
       bind-key -T copy-mode-vi v send-keys -X begin-selection
       set -g status-left-length 100
       set -g status-right-length 200
-      set -g status-justify centre
-      set -g status-style "bg=default"
-      set -g status-left '#[fg=#8aadf4,bg=default]#[fg=#1e2030,bg=#8aadf4,bold] 󰆍 #I #[fg=#8aadf4,bg=default] #[fg=#c6a0f6,bg=default]#[fg=#1e2030,bg=#c6a0f6] #W #[fg=#c6a0f6,bg=default]'
-      set -g window-status-format ""
-      set -g window-status-current-format '#[fg=#363a4f,bg=default]#[fg=#cad3f5,bg=#363a4f] 󰉋 #{b:pane_current_path} #[fg=#363a4f,bg=default]'
-      set -g status-right '#[fg=#363a4f,bg=default]#[fg=#f5bde6,bg=#363a4f] 󰻠 #($HOME/.local/bin/tmux-cpu)%% #[fg=#494d64]│#[fg=#eed49f] 󰍛 #($HOME/.local/bin/tmux-mem)%% #[fg=#494d64]│#[fg=#a6da95] 󰃰 %d/%m %H:%M #[fg=#363a4f,bg=default]'
+      set -g status-left ""
+      set -g status-right "#{E:@catppuccin_status_session}"
+      set -ag status-right "#[fg=#8bd5ca,bg=#1e2030] 󰻠 #(${pkgs.tmuxPlugins.cpu}/share/tmux-plugins/cpu/scripts/cpu_percentage.sh) "
+      set -ag status-right "#[fg=#eed49f,bg=#1e2030] 󰍛 #(${pkgs.tmuxPlugins.cpu}/share/tmux-plugins/cpu/scripts/ram_percentage.sh) "
+      set -ag status-right "#{E:@catppuccin_status_date_time}"
       set -g @floax-width '80%'
       set -g @floax-height '80%'
       set -g @floax-border-color 'magenta'
@@ -279,6 +293,14 @@ in
 
   lazyvim = {
     enable = true;
+    plugins = {
+      colorscheme = ''
+        return {
+            "catppuccin/nvim",
+            opts = { flavour = "macchiato"},
+          }
+      '';
+    };
     extras = {
       lang.nix = {
         enable = true;
@@ -301,6 +323,39 @@ in
       alejandra # Nix formatter
       nil
       nixd
+      vimPlugins.nvim-treesitter.withAllGrammars
+      tailwindcss
+      ansible-lint
+      tailwindcss-language-server
+      vscode-langservers-extracted # jsonls
+      netcoredbg # .NET debugger
+      vscode-js-debug
+      pyright
+      markdown-toc
+      pipx
+      cmake-lint
+      cmake
+      fsautocomplete
+      csharpier
+      fantomas
+      vimPlugins.nvim-java-test
+      angular-language-server
+      typescript
+      vimPlugins.nvim-treesitter.withAllGrammars
+      tree-sitter
+      lua5_1
+      mermaid-cli
+      viu
+      chafa
+      ast-grep
+      stylua
+      shfmt
+      ruff
+      lua-language-server
+      yaml-language-server
+      vim-language-server
+      sqlite
+      statix
     ];
     treesitterParsers = with pkgs.vimPlugins.nvim-treesitter-parsers; [
       c
