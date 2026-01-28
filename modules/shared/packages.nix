@@ -70,6 +70,7 @@ with pkgs;
   nerd-fonts.jetbrains-mono
   nodejs_24
   noto-fonts
+  obsidian
   noto-fonts-color-emoji
   openjdk
   openssh

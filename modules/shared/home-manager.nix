@@ -291,14 +291,7 @@ in
 
   lazyvim = {
     enable = true;
-    plugins = {
-      colorscheme = ''
-        return {
-            "catppuccin/nvim",
-            opts = { flavour = "macchiato"},
-          }
-      '';
-    };
+    configFiles = ./lazyvim;
     extras = {
       lang = {
         nix = {
@@ -323,6 +316,8 @@ in
       alejandra # Nix formatter
       nil
       nixd
+      vimPlugins.plenary-nvim
+      vimPlugins.obsidian-nvim
       vimPlugins.nvim-treesitter.withAllGrammars
       tailwindcss
       ansible-lint
