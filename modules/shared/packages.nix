@@ -1,76 +1,103 @@
 { pkgs }:
 
-with pkgs; [
-  # General packages for development and system management
-  alacritty
+with pkgs;
+[
+  age
+  argo-rollouts
+  argo-workflows
+  argocd
+  awscli2
+  azure-cli
   bash-completion
   bat
+  bitwarden-cli
+  bitwarden-desktop
   btop
+  cargo
+  copilot-cli
   coreutils
-  killall
-  openssh
-  sqlite
-  wget
-  zip
-
-  # Encryption and security tools
-  age
-  gnupg
-
-  # Cloud-related tools and SDKs
+  curl
+  curlie
+  dejavu_fonts
+  direnv
   docker
   docker-compose
-  bitwarden-desktop
-  bitwarden-cli
-
-  # Media-related packages
-  dejavu_fonts
+  doctl
   fd
   font-awesome
+  fzf
+  gcc
+  gh
+  gnupg
+  go
   hack-font
-  noto-fonts
-  noto-fonts-color-emoji
-  meslo-lgs-nf
-  nerd-fonts.jetbrains-mono
-
-  # Node.js development tools
-  nodejs_24
-
-  # Text and terminal utilities
+  hcloud
+  hetzner-kube
   htop
+  httpie
+  hugo
   jetbrains-mono
   jq
-  ripgrep
-  tree
-  tmux
-  unzip
-  unimatrix
-  xh
-  curlie
-  httpie
-  posting
-  age
-  sshs
-  tshark
-  termshark
-  
-  # Development tools
-  curl
-  gh
-  terraform
+  kargo
+  killall
   kubectl
-  awscli2
+  kubectl-ai
+  kubectl-cnpg
+  kubectl-convert
+  kubectl-df-pv
+  kubectl-doctor
+  kubectl-evict-pod
+  kubectl-example
+  kubectl-explore
+  kubectl-gadget
+  kubectl-graph
+  kubectl-images
+  kubectl-klock
+  kubectl-ktop
+  kubectl-neat
+  kubectl-node-shell
+  kubectl-tree
+  kubectl-validate
+  kubectl-view-allocations
+  kubectl-view-secret
+  kubelogin
+  kubelogin-oidc
+  lazydocker
   lazygit
-  fzf
-  direnv
-  
-  # Programming languages and runtimes
-  go
-  rustc
-  cargo
+  lazyhetzner
+  lsof
+  meslo-lgs-nf
+  nerd-fonts.jetbrains-mono
+  nodejs_24
+  noto-fonts
+  noto-fonts-color-emoji
   openjdk
-
-  # Python packages
+  openssh
+  pipx
+  posting
   python3
+  ripgrep
+  rustc
+  sqlite
+  sshs
+  termshark
+  terraform
+  terraform-compliance
+  terraform-inventory
+  terraform-landscape
+  terraform-ls
+  terraform-lsp
+  tfsec
+  tmux
+  tree
+  tshark
+  unimatrix
+  unzip
+  uv
   virtualenv
+  wget
+  wl-clipboard # Wayland clipboard
+  xclip # X11 clipboard (fallback)
+  xh
+  zip
 ]

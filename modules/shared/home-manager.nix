@@ -282,8 +282,6 @@ in
       init.defaultBranch = "main";
       commit.gpgsign = true;
       tag.gpgsign = true;
-      # credential."https://github.com".helper = "!gh auth git-credential";
-      # credential."https://gist.github.com".helper = "!gh auth git-credential";
     };
   };
 
@@ -302,20 +300,22 @@ in
       '';
     };
     extras = {
-      lang.nix = {
-        enable = true;
-        installDependencies = true;
-        installRuntimeDependencies = true;
-      };
-      lang.python = {
-        enable = true;
-        installDependencies = true; # Install ruff
-        installRuntimeDependencies = true; # Install python3
-      };
-      lang.go = {
-        enable = true;
-        installDependencies = true; # Install gopls, gofumpt, etc.
-        installRuntimeDependencies = true; # Install go compiler
+      lang = {
+        nix = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        python = {
+          enable = true;
+          installDependencies = true; # Install ruff
+          installRuntimeDependencies = true; # Install python3
+        };
+        go = {
+          enable = true;
+          installDependencies = true; # Install gopls, gofumpt, etc.
+          installRuntimeDependencies = true; # Install go compiler
+        };
       };
     };
     extraPackages = with pkgs; [
@@ -837,4 +837,8 @@ in
     icons = "auto";
     git = true;
   };
+
+  gemini-cli.enable = true;
+  fzf.enable = true;
+
 }
