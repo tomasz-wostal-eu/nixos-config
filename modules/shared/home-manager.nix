@@ -294,6 +294,11 @@ in
     configFiles = ./lazyvim;
     extras = {
       lang = {
+        helm = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
         nix = {
           enable = true;
           installDependencies = true;
@@ -320,6 +325,7 @@ in
       vimPlugins.obsidian-nvim
       vimPlugins.nvim-treesitter.withAllGrammars
       tailwindcss
+      helm-ls
       ansible-lint
       tailwindcss-language-server
       vscode-langservers-extracted # jsonls

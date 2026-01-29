@@ -62,6 +62,7 @@ with pkgs;
   kubectl-view-secret
   kubelogin
   kubelogin-oidc
+  kubernetes-helm
   lazydocker
   lazygit
   lazyhetzner
