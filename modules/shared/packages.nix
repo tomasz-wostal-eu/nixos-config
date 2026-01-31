@@ -38,6 +38,7 @@ with pkgs;
   hugo
   jetbrains-mono
   jq
+  k3d
   kargo
   killall
   kubectl
@@ -73,6 +74,7 @@ with pkgs;
   noto-fonts
   obsidian
   noto-fonts-color-emoji
+  ollama
   openjdk
   openssh
   pipx

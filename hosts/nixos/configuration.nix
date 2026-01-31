@@ -5,13 +5,16 @@
 { config, pkgs, ... }:
 
 {
-  imports =
-    [ # Include the results of the hardware scan.
-      ./hardware-configuration.nix
-    ];
+  imports = [
+    # Include the results of the hardware scan.
+    ./hardware-configuration.nix
+  ];
 
   # Flakes
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
 
   #GC
   nix.settings.auto-optimise-store = true;
@@ -66,6 +69,13 @@
     variant = "";
   };
 
+  # Enable tailscale
+  services = {
+    tailscale = {
+      enable = true;
+    };
+  };
+
   # Configure console keymap
   console.keyMap = "pl2";
 
@@ -95,14 +105,17 @@
   users.users.twostal = {
     isNormalUser = true;
     description = "Tomasz Wostal";
-    extraGroups = [ "networkmanager" "wheel" ];
+    extraGroups = [
+      "networkmanager"
+      "wheel"
+    ];
     shell = pkgs.zsh;
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE7sJw8iY6Y9DoG9kC9E+O7ttvALsNRb4kaL7XCbE/6W tomasz@wostal.eu"
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJN0QAY5Oaj4lHgYDJqKwbAqQbsKssW6Go9dWuv2NzAE tomasz@wostal.eu"
     ];
     packages = with pkgs; [
-    #  thunderbird
+      #  thunderbird
       vim
     ];
   };
@@ -118,10 +131,18 @@
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
-  #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
-  #  wget
+    #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
+    #  wget
     podman-compose
-  ];
+      ];
+
+  fileSystems."/mnt/k8s-volumes" = {
+    device   = "192.168.55.115:/volume1/k8s-volumes";
+    fsType   = "nfs";
+    options  = [ "rw" "noatime" "auto" "hard" "timeo=30" "actimeo=30" ];
+  };
+
+  
 
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.
@@ -134,7 +155,7 @@
   # Podman (rootless containers)
   virtualisation.podman = {
     enable = true;
-    dockerCompat = true;  # alias docker -> podman
+    dockerCompat = true; # alias docker -> podman
     defaultNetwork.settings.dns_enabled = true;
   };
 

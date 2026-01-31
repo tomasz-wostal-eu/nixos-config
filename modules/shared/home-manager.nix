@@ -291,6 +291,7 @@ in
 
   lazyvim = {
     enable = true;
+    pluginSource = "nixpkgs";
     configFiles = ./lazyvim;
     extras = {
       lang = {
