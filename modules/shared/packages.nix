@@ -38,6 +38,7 @@ with pkgs;
   hugo
   jetbrains-mono
   jq
+  just
   k3d
   kargo
   killall
@@ -104,4 +105,5 @@ with pkgs;
   xclip # X11 clipboard (fallback)
   xh
   zip
+  yq
 ]

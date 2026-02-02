@@ -300,6 +300,11 @@ in
           installDependencies = true;
           installRuntimeDependencies = true;
         };
+        just = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
         nix = {
           enable = true;
           installDependencies = true;

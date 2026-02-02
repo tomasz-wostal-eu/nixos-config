@@ -108,6 +108,7 @@
     extraGroups = [
       "networkmanager"
       "wheel"
+      "podman"
     ];
     shell = pkgs.zsh;
     openssh.authorizedKeys.keys = [
@@ -152,10 +153,11 @@
     enableSSHSupport = true;
   };
 
-  # Podman (rootless containers)
+  # Podman (rootful containers)
   virtualisation.podman = {
     enable = true;
     dockerCompat = true; # alias docker -> podman
+    dockerSocket.enable = true; # socket dla rootful podman
     defaultNetwork.settings.dns_enabled = true;
   };
 
