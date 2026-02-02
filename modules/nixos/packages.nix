@@ -33,7 +33,8 @@ shared-packages ++ [
   tree
   unixtools.ifconfig
   unixtools.netstat
-  xclip
+  wl-clipboard # Wayland clipboard
+  xclip # X11 clipboard
   xorg.xwininfo # Provides a cursor to click and learn about windows
   xorg.xrandr
 

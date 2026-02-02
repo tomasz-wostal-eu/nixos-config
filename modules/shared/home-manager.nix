@@ -29,7 +29,7 @@ in
   atuin = {
     enable = true;
     enableZshIntegration = true;
-    enableNushellIntegration = true;
+    enableNushellIntegration = false;
     flags = [ "--disable-up-arrow" ];
     settings = {
       auto_sync = true;
@@ -75,13 +75,13 @@ in
   carapace = {
     enable = true;
     enableZshIntegration = true;
-    enableNushellIntegration = true;
+    enableNushellIntegration = false;
   };
 
   starship = {
     enable = true;
     enableZshIntegration = true;
-    enableNushellIntegration = true;
+    enableNushellIntegration = false;
     settings = {
       add_newline = false;
       format = "$directory$character";
@@ -335,16 +335,16 @@ in
       ansible-lint
       tailwindcss-language-server
       vscode-langservers-extracted # jsonls
-      netcoredbg # .NET debugger
+      # netcoredbg # .NET debugger - broken in nixpkgs-unstable for aarch64-darwin
       vscode-js-debug
       pyright
       markdown-toc
       pipx
       cmake-lint
       cmake
-      fsautocomplete
-      csharpier
-      fantomas
+      # fsautocomplete # broken in nixpkgs-unstable for aarch64-darwin
+      # csharpier # broken in nixpkgs-unstable for aarch64-darwin
+      # fantomas # broken in nixpkgs-unstable for aarch64-darwin
       vimPlugins.nvim-java-test
       angular-language-server
       typescript
@@ -604,18 +604,18 @@ in
   zoxide = {
     enable = true;
     enableZshIntegration = true;
-    enableNushellIntegration = true;
+    enableNushellIntegration = false;
   };
 
   direnv = {
     enable = true;
     enableZshIntegration = true;
-    enableNushellIntegration = true;
+    enableNushellIntegration = false;
     nix-direnv.enable = true;
   };
 
   nushell = {
-    enable = true;
+    enable = false; # broken in nixpkgs-unstable (test failure)
 
     shellAliases = {
       # General
@@ -840,7 +840,7 @@ in
   eza = {
     enable = true;
     enableZshIntegration = true;
-    enableNushellIntegration = true;
+    enableNushellIntegration = false;
     icons = "auto";
     git = true;
   };

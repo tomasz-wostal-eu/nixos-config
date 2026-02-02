@@ -3,9 +3,12 @@
 with pkgs;
 [
   age
+  ansible
+  ansible-lint
   argo-rollouts
   argo-workflows
   argocd
+  arp-scan
   awscli2
   azure-cli
   bash-completion
@@ -14,6 +17,8 @@ with pkgs;
   bitwarden-desktop
   btop
   cargo
+  checkov
+  cmatrix
   copilot-cli
   coreutils
   curl
@@ -24,24 +29,32 @@ with pkgs;
   docker-compose
   doctl
   fd
+  ffmpeg
   font-awesome
   fzf
   gcc
   gh
+  gitleaks
   gnupg
   go
   hack-font
+  hadolint
   hcloud
+  helmfile
   hetzner-kube
   htop
   httpie
   hugo
+  imagemagick
   jetbrains-mono
   jq
   just
   k3d
+  k6
   kargo
   killall
+  kind
+  krew
   kubectl
   kubectl-ai
   kubectl-cnpg
@@ -64,13 +77,18 @@ with pkgs;
   kubectl-view-secret
   kubelogin
   kubelogin-oidc
+  kubeseal
   kubernetes-helm
   lazydocker
   lazygit
   lazyhetzner
+  lima
+  lolcat
   lsof
+  mc # midnight-commander
   meslo-lgs-nf
   nerd-fonts.jetbrains-mono
+  nmap
   nodejs_24
   noto-fonts
   obsidian
@@ -78,12 +96,25 @@ with pkgs;
   ollama
   openjdk
   openssh
+  packer
+  pass
   pipx
+  podman
+  podman-compose
+  podman-tui
+  poetry
+  ponysay
   posting
   python3
+  qemu
   ripgrep
+  ruby
   rustc
+  s3cmd
+  # sonar-scanner # not in nixpkgs
+  sqlfluff
   sqlite
+  sshpass
   sshs
   termshark
   terraform
@@ -92,6 +123,9 @@ with pkgs;
   terraform-landscape
   terraform-ls
   terraform-lsp
+  terragrunt
+  tesseract
+  tflint
   tfsec
   tmux
   tree
@@ -101,9 +135,9 @@ with pkgs;
   uv
   virtualenv
   wget
-  wl-clipboard # Wayland clipboard
-  xclip # X11 clipboard (fallback)
+  # wireshark # GUI conflicts with termshark/tshark CLI, use cask on macOS
   xh
-  zip
+  yamllint
   yq
+  zip
 ]

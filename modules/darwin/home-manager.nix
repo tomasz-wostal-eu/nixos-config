@@ -61,8 +61,9 @@ in
   };
 
   # Fully declarative dock using the latest from Nix Store
+  # Disabled: dockutil requires Swift which is broken in nixpkgs-unstable
   local.dock = {
-    enable = true;
+    enable = false;
     username = user;
     entries = [
       { path = "/Applications/Safari.app/"; }

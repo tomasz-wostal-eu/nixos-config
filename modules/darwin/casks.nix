@@ -2,32 +2,66 @@ _:
 
 [
   # Development Tools
-  "homebrew/cask/docker"
+  "dbeaver-community"
+  "docker"
+  "dotnet-sdk"
+  "utm"
   "visual-studio-code"
 
   # Productivity Tools
   "raycast"
 
   # Browsers
+  "brave-browser"
   "google-chrome"
+  "microsoft-edge"
 
   # Terminals
   "ghostty"
-  "iterm2"
 
-  # Communication Tools - Examples (uncomment as needed)
-  # "discord"
-  # "notion"
-  # "slack"
-  # "telegram"
-  # "zoom"
+  # Communication Tools
+  "discord"
+  "microsoft-teams"
+  "slack"
+  "telegram-desktop"
+  "whatsapp"
 
-  # Utility Tools - Examples (uncomment as needed)
-  # "syncthing"
-  # "1password"
-  # "rectangle"
+  # Cloud & DevOps
+  "google-drive"
+  "microsoft-azure-storage-explorer"
+  "openvpn-connect"
+  "tailscale"
 
-  # Entertainment Tools - Examples (uncomment as needed)
-  # "spotify"
-  # "vlc"
+  # Kubernetes Tools
+  "freelens"
+  "k8studio"
+
+  # AI Tools
+  "chatgpt"
+  "claude"
+
+  # Security
+  "gpg-suite"
+
+  # Media & Creative
+  "kdenlive"
+  "obs"
+  "spotify"
+
+  # Utilities
+  "aerospace"
+  "karabiner-elements"
+  "macfuse"
+
+  # Gaming
+  "steam"
+
+  # Network Tools
+  "mqtt-explorer"
+  "wireshark"
+  "zenmap"
+
+  # Microsoft Office
+  "microsoft-auto-update"
+  "microsoft-office"
 ]
