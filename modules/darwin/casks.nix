@@ -17,6 +17,8 @@ _:
   "ghostty"
 
   # Communication Tools
+  "discord"
+  "signal"
   "slack"
   "telegram-desktop"
   "whatsapp"

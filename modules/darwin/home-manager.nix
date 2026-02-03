@@ -86,6 +86,12 @@ in
       { path = "/Applications/Google Chrome.app/"; }
       { path = "/Applications/Brave Browser.app/"; }
       { path = "${pkgs.firefox}/Applications/Firefox.app/"; }
+      { path = "/Applications/WhatsApp.app/"; }
+      { path = "/Applications/Freelens.app/"; }
+      { path = "/Applications/Signal.app/"; }
+      { path = "/Applications/Telegram Desktop.app/"; }
+      { path = "/Applications/Slack.app/"; }
+      { path = "/Applications/Discord.app/"; }
       { path = "/System/Applications/System Settings.app/"; }
       {
         path = "${config.users.users.${user}.home}/Downloads";
