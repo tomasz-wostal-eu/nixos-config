@@ -27,6 +27,7 @@ with pkgs;
   direnv
   docker
   docker-compose
+  dotnet-sdk
   doctl
   fd
   ffmpeg

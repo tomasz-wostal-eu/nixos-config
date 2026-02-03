@@ -3,10 +3,8 @@ _:
 [
   # Development Tools
   "dbeaver-community"
-  "docker"
-  "dotnet-sdk"
+  "docker-desktop"
   "utm"
-  "visual-studio-code"
 
   # Productivity Tools
   "raycast"
@@ -14,31 +12,26 @@ _:
   # Browsers
   "brave-browser"
   "google-chrome"
-  "microsoft-edge"
 
   # Terminals
   "ghostty"
 
   # Communication Tools
-  "discord"
-  "microsoft-teams"
   "slack"
   "telegram-desktop"
   "whatsapp"
 
   # Cloud & DevOps
   "google-drive"
-  "microsoft-azure-storage-explorer"
-  "openvpn-connect"
   "tailscale"
 
   # Kubernetes Tools
   "freelens"
-  "k8studio"
 
   # AI Tools
   "chatgpt"
   "claude"
+  "gemini"
 
   # Security
   "gpg-suite"
@@ -51,7 +44,6 @@ _:
   # Utilities
   "aerospace"
   "karabiner-elements"
-  "macfuse"
 
   # Gaming
   "steam"
@@ -65,3 +57,4 @@ _:
   "microsoft-auto-update"
   "microsoft-office"
 ]
+

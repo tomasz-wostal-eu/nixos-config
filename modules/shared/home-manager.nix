@@ -17,6 +17,14 @@ in
     enable = true;
     oh-my-zsh.enable = true;
     initContent = ''
+      # Fix TERM for SSH connections from Ghostty
+      if [[ -n "$SSH_CONNECTION" ]] && [[ "$TERM" == "xterm-ghostty" ]]; then
+        export TERM=xterm-256color
+      fi
+
+      # GPG TTY for signing over SSH
+      export GPG_TTY=$(tty)
+
       path+=("$HOME/.local/bin")
       path+=("$HOME/.cache/npm/global/bin/")
       if [[ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
@@ -179,6 +187,7 @@ in
       set -g detach-on-destroy off
       set -g renumber-windows on
       set -g set-clipboard on
+      set -g allow-passthrough on
       set -as terminal-features ",xterm-256color:RGB"
       set -as terminal-features ",xterm-ghostty:RGB"
       set -ag terminal-overrides ",xterm-256color:Tc"
@@ -209,6 +218,9 @@ in
       bind S choose-session
       bind K send-keys "clear"\; send-keys "Enter"
       bind-key -T copy-mode-vi v send-keys -X begin-selection
+      bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel
+      set -g @yank_with_mouse on
+      set -g @yank_selection_mouse 'clipboard'
       set -g status-left-length 100
       set -g status-right-length 200
       set -g status-left ""
@@ -294,8 +306,68 @@ in
     pluginSource = "nixpkgs";
     configFiles = ./lazyvim;
     extras = {
+      ai = {
+        claudecode.enable = true;
+        copilot.enable = true;
+        sidekick.enable = true;
+      };
+      coding = {
+        mini_comment.enable = true;
+        mini_snippets.enable = true;
+        mini_surround.enable = true;
+        yanky.enable = true;
+      };
+      dap = {
+        core.enable = true;
+        nlua.enable = true;
+      };
       lang = {
+        angular = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        ansible = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        clangd = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        cmake = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        docker = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        dotnet = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        git = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        go = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
         helm = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        json = {
           enable = true;
           installDependencies = true;
           installRuntimeDependencies = true;
@@ -305,20 +377,60 @@ in
           installDependencies = true;
           installRuntimeDependencies = true;
         };
+        markdown = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
         nix = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        nushell = {
           enable = true;
           installDependencies = true;
           installRuntimeDependencies = true;
         };
         python = {
           enable = true;
-          installDependencies = true; # Install ruff
-          installRuntimeDependencies = true; # Install python3
+          installDependencies = true;
+          installRuntimeDependencies = true;
         };
-        go = {
+        rust = {
           enable = true;
-          installDependencies = true; # Install gopls, gofumpt, etc.
-          installRuntimeDependencies = true; # Install go compiler
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        sql = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        tailwind = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        terraform = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        toml = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        typescript = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
+        };
+        yaml = {
+          enable = true;
+          installDependencies = true;
+          installRuntimeDependencies = true;
         };
       };
     };
@@ -334,17 +446,17 @@ in
       helm-ls
       ansible-lint
       tailwindcss-language-server
-      vscode-langservers-extracted # jsonls
-      # netcoredbg # .NET debugger - broken in nixpkgs-unstable for aarch64-darwin
+      vscode-langservers-extracted
+      netcoredbg
       vscode-js-debug
       pyright
       markdown-toc
       pipx
       cmake-lint
       cmake
-      # fsautocomplete # broken in nixpkgs-unstable for aarch64-darwin
-      # csharpier # broken in nixpkgs-unstable for aarch64-darwin
-      # fantomas # broken in nixpkgs-unstable for aarch64-darwin
+      fsautocomplete
+      csharpier
+      fantomas
       vimPlugins.nvim-java-test
       angular-language-server
       typescript
@@ -847,5 +959,7 @@ in
 
   gemini-cli.enable = true;
   fzf.enable = true;
+
+  firefox.enable = true;
 
 }

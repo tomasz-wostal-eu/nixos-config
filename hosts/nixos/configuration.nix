@@ -135,7 +135,8 @@
     #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
     #  wget
     podman-compose
-      ];
+    ghostty.terminfo
+  ];
 
   fileSystems."/mnt/k8s-volumes" = {
     device   = "192.168.55.115:/volume1/k8s-volumes";

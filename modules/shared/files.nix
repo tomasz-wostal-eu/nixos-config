@@ -1,6 +1,20 @@
 { pkgs, config, ... }:
 
 {
+  ".local/bin/pinentry-auto".source = pkgs.writeShellScript "pinentry-auto" ''
+    # Use curses pinentry for SSH, mac pinentry otherwise
+    if [ -n "$SSH_TTY" ] || [ -n "$SSH_CONNECTION" ]; then
+      exec ${pkgs.pinentry-curses}/bin/pinentry-curses "$@"
+    else
+      exec /usr/local/MacGPG2/libexec/pinentry-mac.app/Contents/MacOS/pinentry-mac "$@"
+    fi
+  '';
+
+  ".gnupg/gpg-agent.conf".text = ''
+    default-cache-ttl 86400
+    max-cache-ttl 86400
+    pinentry-program /Users/twostal/.local/bin/pinentry-auto
+  '';
   ".local/bin/tmux-cpu".source = pkgs.writeShellScript "tmux-cpu" ''
     if [ -f /proc/stat ]; then
       awk '/^cpu / {used=$2+$3+$4+$6+$7+$8; total=used+$5; printf "%d", used*100/total}' /proc/stat
