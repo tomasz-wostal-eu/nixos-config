@@ -2,7 +2,7 @@
 
 let
   user = "twostal";
-  shared-programs = import ../shared/home-manager.nix { inherit config pkgs lib; };
+  shared = import ../shared/home-manager.nix { inherit config pkgs lib; };
   shared-files = import ../shared/files.nix { inherit config pkgs; };
 in
 {
@@ -15,9 +15,10 @@ in
     packages = pkgs.callPackage ./packages.nix {};
     file = shared-files // import ./files.nix { inherit user; };
     stateVersion = "25.11";
+    shellAliases = shared.shellAliases;
   };
 
-  programs = shared-programs // {
+  programs = shared.programs // {
     ghostty = {
       enable = true;
       enableZshIntegration = true;

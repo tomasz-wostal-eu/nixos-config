@@ -10,6 +10,7 @@ let
   user = "twostal";
   sharedFiles = import ../shared/files.nix { inherit config pkgs; };
   additionalFiles = import ./files.nix { inherit user config pkgs; };
+  shared = import ../shared/home-manager.nix { inherit config pkgs lib; };
 in
 {
   imports = [
@@ -67,9 +68,10 @@ in
             additionalFiles
           ];
           stateVersion = "23.11";
+          shellAliases = shared.shellAliases;
         };
         imports = [ lazyvim.homeManagerModules.default ];
-        programs = { } // import ../shared/home-manager.nix { inherit config pkgs lib; };
+        programs = shared.programs;
 
         # Marked broken Oct 20, 2022 check later to remove this
         # https://github.com/nix-community/home-manager/issues/3344

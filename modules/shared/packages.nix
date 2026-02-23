@@ -141,4 +141,7 @@ with pkgs;
   yamllint
   yq
   zip
+  mosquitto
+  cloudflared
+  cloudflare-cli
 ]
