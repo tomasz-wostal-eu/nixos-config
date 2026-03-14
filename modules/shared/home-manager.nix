@@ -396,7 +396,7 @@ in
             installRuntimeDependencies = true;
           };
           dotnet = {
-            enable = true;
+            enable = false;
             installDependencies = true;
             installRuntimeDependencies = true;
           };
