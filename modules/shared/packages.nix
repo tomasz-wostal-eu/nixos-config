@@ -28,10 +28,10 @@ with pkgs;
   docker
   docker-compose
   dotnet-sdk
-  dotnetCorePackages.dotnet_10.vmr
   doctl
   fd
   ffmpeg
+  flutter
   font-awesome
   fzf
   gcc
