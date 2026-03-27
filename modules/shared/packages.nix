@@ -31,7 +31,6 @@ with pkgs;
   doctl
   fd
   ffmpeg
-  flutter
   font-awesome
   fzf
   gcc
@@ -145,4 +144,6 @@ with pkgs;
   mosquitto
   cloudflared
   cloudflare-cli
+  sox
+  cocoapods
 ]

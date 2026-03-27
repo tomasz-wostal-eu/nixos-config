@@ -973,5 +973,7 @@ in
 
     firefox.enable = true;
 
+    bun.enable = true;
+
   }; # end programs
 }

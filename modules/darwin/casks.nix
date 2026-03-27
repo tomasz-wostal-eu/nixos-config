@@ -58,5 +58,7 @@ _:
   # Microsoft Office
   "microsoft-auto-update"
   "microsoft-office"
-]
 
+  "flutter"
+  "figma"
+]
