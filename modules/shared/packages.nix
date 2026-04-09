@@ -146,4 +146,6 @@ with pkgs;
   cloudflare-cli
   sox
   cocoapods
+  fjo
+  forgejo-cli
 ]
