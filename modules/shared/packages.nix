@@ -12,6 +12,7 @@ with pkgs;
   awscli2
   azure-cli
   bash-completion
+  zsh-completions
   bat
   bitwarden-cli
   bitwarden-desktop
@@ -148,4 +149,41 @@ with pkgs;
   cocoapods
   fjo
   forgejo-cli
+]
+++ lib.optionals stdenv.isLinux [
+  # Homebrew equivalents available in nixpkgs for Linux.
+  android-studio
+  brave
+  codex
+  conftest
+  crane
+  dbeaver-bin
+  discord
+  figma-linux
+  flutter
+  freelens-bin
+  gemini-cli
+  ghostty
+  gitea-actions-runner # Homebrew act_runner
+  google-chrome
+  htmlhint
+  kdePackages.kdenlive
+  microsoft-edge
+  mqtt-explorer
+  obs-studio
+  openvpn
+  signal-desktop
+  slack
+  spotify
+  steam
+  stylelint
+  tailscale
+  teams-for-linux
+  telegram-desktop
+  vscode
+  wasistlos # formerly whatsapp-for-linux
+  watch
+  wireshark
+  zenmap
+  qmd
 ]

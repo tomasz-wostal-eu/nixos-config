@@ -29,9 +29,11 @@ in
     enable = true;
     taps = [
       "nikitabobko/tap"
+      "timvw/tap"
     ];
+    brews = pkgs.callPackage ./brews.nix { };
     casks = pkgs.callPackage ./casks.nix { };
-    # onActivation.cleanup = "uninstall";
+    onActivation.cleanup = "uninstall";
 
     # These app IDs are from using the mas CLI app
     # mas = mac app store

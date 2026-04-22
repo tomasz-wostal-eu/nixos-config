@@ -53,6 +53,7 @@ shared-packages ++ [
 
   # Development tools
   firefox
+  git-wt
   
   # Music and entertainment
 ]

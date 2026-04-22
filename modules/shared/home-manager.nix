@@ -73,6 +73,13 @@ in
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
             . /nix/var/nix/profiles/default/etc/profile.d/nix.sh
             fi
+
+        # ZSH completions
+        command -v kubectl &>/dev/null && source <(kubectl completion zsh)
+        command -v argocd  &>/dev/null && source <(argocd  completion zsh)
+        command -v argo    &>/dev/null && source <(argo    completion zsh)
+        command -v kargo   &>/dev/null && source <(kargo   completion zsh)
+        command -v sesh    &>/dev/null && source <(sesh    completion zsh)
       '';
     };
 
@@ -218,7 +225,7 @@ in
         tmux-thumbs
         tmux-fzf
         fzf-tmux-url
-        tmux-sessionx
+        #tmux-sessionx
         tmux-floax
       ];
 
@@ -259,14 +266,29 @@ in
         bind x swap-pane -D
         bind S choose-session
         bind K send-keys "clear"\; send-keys "Enter"
+        bind -N "last-session (sesh) " L run-shell "sesh last"
+        bind-key "T" run-shell "sesh connect \"$(
+          sesh list --icons | fzf-tmux -p 80%,70% \
+            --no-sort --ansi --border-label ' sesh ' --prompt '⚡  ' \
+            --header '  ^a all ^t tmux ^g configs ^x zoxide ^d tmux kill ^f find' \
+            --bind 'tab:down,btab:up' \
+            --bind 'ctrl-a:change-prompt(⚡  )+reload(sesh list --icons)' \
+            --bind 'ctrl-t:change-prompt(🪟  )+reload(sesh list -t --icons)' \
+            --bind 'ctrl-g:change-prompt(⚙️  )+reload(sesh list -c --icons)' \
+            --bind 'ctrl-x:change-prompt(📁  )+reload(sesh list -z --icons)' \
+            --bind 'ctrl-f:change-prompt(🔎  )+reload(fd -H -d 2 -t d -E .Trash . ~)' \
+            --bind 'ctrl-d:execute(tmux kill-session -t {2..})+change-prompt(⚡  )+reload(sesh list --icons)' \
+            --preview-window 'right:55%' \
+            --preview 'sesh preview {}'
+        )\""
         bind-key -T copy-mode-vi v send-keys -X begin-selection
         bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel
         set -g @yank_with_mouse on
         set -g @yank_selection_mouse 'clipboard'
         set -g status-left-length 100
         set -g status-right-length 200
-        set -g status-left ""
-        set -g status-right "#{E:@catppuccin_status_session}"
+        set -g status-left "#{E:@catppuccin_status_session}#[bg=default] "
+        set -g status-right ""
         set -ag status-right "#[fg=#8bd5ca,bg=#1e2030] 󰻠 #(${pkgs.tmuxPlugins.cpu}/share/tmux-plugins/cpu/scripts/cpu_percentage.sh) "
         set -ag status-right "#[fg=#eed49f,bg=#1e2030] 󰍛 #(${pkgs.tmuxPlugins.cpu}/share/tmux-plugins/cpu/scripts/ram_percentage.sh) "
         set -ag status-right "#{E:@catppuccin_status_date_time}"
@@ -276,17 +298,28 @@ in
         set -g @floax-text-color 'blue'
         set -g @floax-bind 'p'
         set -g @floax-change-path 'true'
-        set -g @sessionx-bind 'o'
-        set -g @sessionx-bind-zo-new-window 'ctrl-y'
-        set -g @sessionx-auto-accept 'off'
-        set -g @sessionx-zoxide-mode 'on'
-        set -g @sessionx-custom-paths '$HOME/dotfiles'
-        set -g @sessionx-window-height '85%'
-        set -g @sessionx-window-width '75%'
-        set -g @sessionx-filter-current 'false'
+        # set -g @sessionx-bind 'o'
+        # set -g @sessionx-bind-zo-new-window 'ctrl-y'
+        # set -g @sessionx-auto-accept 'off'
+        # set -g @sessionx-zoxide-mode 'on'
+        # set -g @sessionx-custom-paths '$HOME/dotfiles'
+        # set -g @sessionx-window-height '85%'
+        # set -g @sessionx-window-width '75%'
+        # set -g @sessionx-filter-current 'false'
         set -g @continuum-restore 'on'
         set -g @resurrect-strategy-nvim 'session'
       '';
+    };
+
+    sesh = {
+      enable = true;
+      enableAlias = true;
+      enableTmuxIntegration = true;
+      icons = true;
+      tmuxKey = "s";
+      settings = {
+        blacklist = [ "scratch" ];
+      };
     };
 
     ssh = {
@@ -312,6 +345,10 @@ in
 
     gh = {
       enable = true;
+      extensions = with pkgs; [
+        gh-dash
+        gh-enhance
+      ];
       gitCredentialHelper = {
         enable = true;
       };
@@ -333,6 +370,7 @@ in
 
     git = {
       enable = true;
+      signing.format = "openpgp";
       settings = {
         user = {
           name = "Tomasz Wostal";
@@ -969,11 +1007,20 @@ in
     };
 
     gemini-cli.enable = true;
-    fzf.enable = true;
+    fzf = {
+      enable = true;
+      tmux = {
+        enableShellIntegration = true;
+      };
+    };
 
     firefox.enable = true;
 
     bun.enable = true;
+
+    opencode = {
+      enable = true;
+    };
 
   }; # end programs
 }

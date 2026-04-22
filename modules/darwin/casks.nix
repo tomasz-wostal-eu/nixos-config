@@ -2,9 +2,15 @@ _:
 
 [
   # Development Tools
+  "android-studio"
+  "codex"
   "dbeaver-community"
   "docker-desktop"
+  "dotnet-sdk"
+  "figma"
+  "flutter"
   "utm"
+  "visual-studio-code"
 
   # Productivity Tools
   "raycast"
@@ -25,7 +31,9 @@ _:
 
   # Cloud & DevOps
   "google-drive"
-  "tailscale"
+  "microsoft-azure-storage-explorer"
+  "openvpn-connect"
+  "tailscale-app"
 
   # Kubernetes Tools
   "freelens"
@@ -37,6 +45,7 @@ _:
 
   # Security
   "gpg-suite"
+  "macfuse"
 
   # Media & Creative
   "kdenlive"
@@ -52,13 +61,12 @@ _:
 
   # Network Tools
   "mqtt-explorer"
-  "wireshark"
+  "wireshark-app"
   "zenmap"
 
   # Microsoft Office
   "microsoft-auto-update"
+  "microsoft-edge"
   "microsoft-office"
-
-  "flutter"
-  "figma"
+  "microsoft-teams"
 ]
