@@ -448,44 +448,105 @@
     theme: catppuccin-macchiato-blue
   '';
 
-  ".local/share/posting/themes/catppuccin-macchiato-blue.yaml".source = pkgs.writeText "catppuccin-macchiato-blue.yaml" ''
-name: "catppuccin-macchiato-blue"
-primary: "#8aadf4"
-secondary: "#8aadf4"
-accent: "#bacff8"
-background: "#24273a"
-surface: "#363a4f"
-error: "#ed8796"
-success: "#a6da95"
-warning: "#eed49f"
-dark: "true"
+  ".local/share/posting/themes/catppuccin-macchiato-blue.yaml".source =
+    pkgs.writeText "catppuccin-macchiato-blue.yaml" ''
+      name: "catppuccin-macchiato-blue"
+      primary: "#8aadf4"
+      secondary: "#8aadf4"
+      accent: "#bacff8"
+      background: "#24273a"
+      surface: "#363a4f"
+      error: "#ed8796"
+      success: "#a6da95"
+      warning: "#eed49f"
+      dark: "true"
 
-text_area:
-  cursor: "reverse #f4dbd6"
-  cursor_line: "underline #cad3f5"
-  selection: "reverse #939ab7"
-  gutter: "bold #a6da95"
-  matched_bracket: "reverse #b8c0e0"
+      text_area:
+        cursor: "reverse #f4dbd6"
+        cursor_line: "underline #cad3f5"
+        selection: "reverse #939ab7"
+        gutter: "bold #a6da95"
+        matched_bracket: "reverse #b8c0e0"
 
-url:
-  base: "italic #8aadf4"
-  protocol: "bold #8bd5ca"
-  separator: "#cad3f5"
+      url:
+        base: "italic #8aadf4"
+        protocol: "bold #8bd5ca"
+        separator: "#cad3f5"
 
-syntax:
-  json_key: "italic #8aadf4"
-  json_number: "#f5a97f"
-  json_string: "#a6da95"
-  json_boolean: "#91d7e3"
-  json_null: "#939ab7"
+      syntax:
+        json_key: "italic #8aadf4"
+        json_number: "#f5a97f"
+        json_string: "#a6da95"
+        json_boolean: "#91d7e3"
+        json_null: "#939ab7"
 
-method:
-  get: "bold #8aadf4"
-  post: "bold #a6da95"
-  put: "bold #eed49f"
-  delete: "bold #ed8796"
-  patch: "bold #8bd5ca"
-  options: "bold #b7bdf8"
-  head: "bold #c6a0f6"
+      method:
+        get: "bold #8aadf4"
+        post: "bold #a6da95"
+        put: "bold #eed49f"
+        delete: "bold #ed8796"
+        patch: "bold #8bd5ca"
+        options: "bold #b7bdf8"
+        head: "bold #c6a0f6"
+    '';
+
+  ".config/gh-dash/config.yml".text = ''
+    prSections:
+      - title: My PRs
+        filters: is:open author:@me
+      - title: Needs Review
+        filters: is:open review-requested:@me
+      - title: All Open
+        filters: is:open
+    issuesSections:
+      - title: My Issues
+        filters: is:open author:@me
+      - title: Assigned
+        filters: is:open assignee:@me
+    notificationsSections:
+      - title: All
+        filters: ""
+      - title: Review Requested
+        filters: reason:review-requested
+      - title: Mentioned
+        filters: reason:mention
+    defaults:
+      preview:
+        open: true
+        width: 0.45
+      prsLimit: 20
+      issuesLimit: 20
+      notificationsLimit: 20
+      view: prs
+      refetchIntervalMinutes: 30
+    repoPaths:
+      mistwolftech/*: ~/projects/*
+    keybindings:
+      prs:
+        - key: g
+          name: lazygit
+          command: >-
+            tmux new-window '
+              cd {{.RepoPath}} && lazygit
+            '
+        - key: C
+          name: claude review
+          command: >-
+            tmux new-window '
+              cd {{.RepoPath}} && claude "Review PR {{.PrNumber}}. Run gh pr view {{.PrNumber}} for description and gh pr diff {{.PrNumber}} for changes. Provide a thorough code review."
+            '
+        - key: T
+          name: actions
+          command: >-
+            tmux new-window '
+              gh enhance -R {{.RepoName}} {{.PrNumber}}
+            '
+    theme:
+      ui:
+        sectionsShowCount: true
+        table:
+          showSeparator: true
+          compact: false
+    confirmQuit: false
   '';
 }

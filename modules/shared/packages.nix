@@ -18,7 +18,7 @@ with pkgs;
   bitwarden-desktop
   btop
   cargo
-  checkov
+  # checkov # python3.13-av fails OOM on aarch64-darwin; use: pipx install checkov
   cmatrix
   copilot-cli
   coreutils
@@ -149,6 +149,8 @@ with pkgs;
   cocoapods
   fjo
   forgejo-cli
+  mkdocs
+  google-cloud-sdk
 ]
 ++ lib.optionals stdenv.isLinux [
   # Homebrew equivalents available in nixpkgs for Linux.

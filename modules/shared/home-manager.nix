@@ -74,6 +74,9 @@ in
             . /nix/var/nix/profiles/default/etc/profile.d/nix.sh
             fi
 
+        # wt shell integration (worktree manager)
+        command -v wt &>/dev/null && source <(wt shellenv)
+
         # ZSH completions
         command -v kubectl &>/dev/null && source <(kubectl completion zsh)
         command -v argocd  &>/dev/null && source <(argocd  completion zsh)
@@ -319,6 +322,39 @@ in
       tmuxKey = "s";
       settings = {
         blacklist = [ "scratch" ];
+        window = [
+          {
+            name = "lazygit";
+            startup_script = "lazygit";
+          }
+          {
+            name = "gh-dash";
+            startup_script = "gh dash";
+          }
+          {
+            name = "actions";
+            startup_script = "gh enhance";
+          }
+        ];
+        session = [
+          {
+            name = "nixos-config";
+            path = "~/nixos-config";
+            startup_command = "wt status";
+          }
+          {
+            name = "drift-warden";
+            path = "~/projects/drift-warden";
+            startup_command = "wt status";
+            windows = [ "gh-dash" ];
+          }
+          {
+            name = "mistwolf-tech";
+            path = "~/projects/mistwolf-tech";
+            startup_command = "wt status";
+            windows = [ "gh-dash" ];
+          }
+        ];
       };
     };
 
@@ -398,9 +434,9 @@ in
           sidekick.enable = true;
         };
         coding = {
-          mini_comment.enable = true;
-          mini_snippets.enable = true;
-          mini_surround.enable = true;
+          mini-comment.enable = true;
+          mini-snippets.enable = true;
+          mini-surround.enable = true;
           yanky.enable = true;
         };
         dap = {
@@ -454,11 +490,6 @@ in
             installRuntimeDependencies = true;
           };
           json = {
-            enable = true;
-            installDependencies = true;
-            installRuntimeDependencies = true;
-          };
-          just = {
             enable = true;
             installDependencies = true;
             installRuntimeDependencies = true;
@@ -1022,5 +1053,12 @@ in
       enable = true;
     };
 
+    television = {
+      enable = true;
+      enableZshIntegration = true;
+      channels = import ./television/channels.nix;
+    };
+
   }; # end programs
+
 }
