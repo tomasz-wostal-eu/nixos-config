@@ -74,6 +74,11 @@ in
             . /nix/var/nix/profiles/default/etc/profile.d/nix.sh
             fi
 
+        # Homebrew on Apple Silicon (puts /opt/homebrew/bin on PATH)
+        if [[ -x /opt/homebrew/bin/brew ]]; then
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+        fi
+
         # wt shell integration (worktree manager)
         command -v wt &>/dev/null && source <(wt shellenv)
 
@@ -324,6 +329,10 @@ in
         blacklist = [ "scratch" ];
         window = [
           {
+            name = "shell";
+            startup_script = "";
+          }
+          {
             name = "lazygit";
             startup_script = "lazygit";
           }
@@ -336,45 +345,51 @@ in
             startup_script = "gh enhance";
           }
         ];
-        session = [
-          {
-            name = "nixos-config";
-            path = "~/nixos-config";
-            startup_command = "wt status";
-          }
-          {
-            name = "drift-warden";
-            path = "~/projects/drift-warden";
-            startup_command = "wt status";
-            windows = [ "gh-dash" ];
-          }
-          {
-            name = "mistwolf-tech";
-            path = "~/projects/mistwolf-tech";
-            startup_command = "wt status";
-            windows = [ "gh-dash" ];
-          }
-        ];
+        # session = [
+        #   {
+        #     name = "nixos-config";
+        #     path = "~/nixos-config";
+        #     startup_command = "wt status";
+        #   }
+        #   {
+        #     name = "drift-warden";
+        #     path = "~/projects/drift-warden";
+        #     startup_command = "wt status";
+        #     windows = [
+        #       "shell"
+        #       "gh-dash"
+        #     ];
+        #   }
+        #   {
+        #     name = "mistwolf-tech";
+        #     path = "~/projects/mistwolf-tech";
+        #     startup_command = "wt status";
+        #     windows = [
+        #       "shell"
+        #       "gh-dash"
+        #     ];
+        #   }
+        # ];
       };
     };
 
     ssh = {
       enable = true;
       enableDefaultConfig = false;
-      matchBlocks = {
+      settings = {
         "*" = {
-          identityFile = "~/.ssh/id_ed25519";
-          addKeysToAgent = "yes";
+          IdentityFile = "~/.ssh/id_ed25519";
+          AddKeysToAgent = "yes";
         };
         "github.com" = {
-          hostname = "github.com";
-          user = "git";
+          HostName = "github.com";
+          User = "git";
         };
         "codeberg.org" = {
-          hostname = "codeberg.org";
-          user = "git";
-          identityFile = "~/.ssh/personal";
-          identitiesOnly = true;
+          HostName = "codeberg.org";
+          User = "git";
+          IdentityFile = "~/.ssh/personal";
+          IdentitiesOnly = true;
         };
       };
     };
@@ -430,7 +445,7 @@ in
       extras = {
         ai = {
           claudecode.enable = true;
-          copilot.enable = true;
+          copilot.enable = false;
           sidekick.enable = true;
         };
         coding = {
@@ -471,8 +486,8 @@ in
           };
           dotnet = {
             enable = false;
-            installDependencies = true;
-            installRuntimeDependencies = true;
+            installDependencies = false;
+            installRuntimeDependencies = false;
           };
           git = {
             enable = true;

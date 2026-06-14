@@ -33,7 +33,12 @@ in
     ];
     brews = pkgs.callPackage ./brews.nix { };
     casks = pkgs.callPackage ./casks.nix { };
-    onActivation.cleanup = "uninstall";
+    onActivation = {
+      cleanup = "uninstall";
+      # Homebrew 4.6+ requires an explicit flag when `brew bundle --cleanup`
+      # would uninstall formulae/casks during non-interactive activation.
+      extraFlags = [ "--force" ];
+    };
 
     # These app IDs are from using the mas CLI app
     # mas = mac app store

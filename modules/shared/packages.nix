@@ -15,12 +15,10 @@ with pkgs;
   zsh-completions
   bat
   bitwarden-cli
-  bitwarden-desktop
   btop
   cargo
   # checkov # python3.13-av fails OOM on aarch64-darwin; use: pipx install checkov
   cmatrix
-  copilot-cli
   coreutils
   curl
   curlie
@@ -149,6 +147,8 @@ with pkgs;
   cocoapods
   fjo
   forgejo-cli
+  git-wt
+  tea
   mkdocs
   google-cloud-sdk
 ]

@@ -44,6 +44,7 @@ _:
   "gemini"
 
   # Security
+  "bitwarden"
   "gpg-suite"
   "macfuse"
 
