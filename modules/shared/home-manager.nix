@@ -682,6 +682,8 @@ in
         markdown_inline
         wgsl # WebGPU Shading Language
         templ # Go templ files
+        fish
+        fsharp
       ];
     };
 
@@ -1052,7 +1054,7 @@ in
       git = true;
     };
 
-    gemini-cli.enable = true;
+    antigravity-cli.enable = true; # formerly gemini-cli
     fzf = {
       enable = true;
       tmux = {

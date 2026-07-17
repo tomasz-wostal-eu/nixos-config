@@ -7,7 +7,7 @@ return {
 	config = function()
 		require("obsidian").setup({
 			workspaces = {
-				{ name = "personal", path = "~/Obsidian" },
+				{ name = "personal", path = "~/projects/second-brain/" },
 			},
 			completion = {
 				nvim_cmp = false,

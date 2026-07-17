@@ -19,7 +19,9 @@ with pkgs;
   cargo
   # checkov # python3.13-av fails OOM on aarch64-darwin; use: pipx install checkov
   cmatrix
+  conftest
   coreutils
+  crane
   curl
   curlie
   dejavu_fonts
@@ -34,6 +36,7 @@ with pkgs;
   fzf
   gcc
   gh
+  gitea-actions-runner # Homebrew act_runner / gitea-runner
   gitleaks
   gnupg
   go
@@ -42,6 +45,7 @@ with pkgs;
   hcloud
   helmfile
   hetzner-kube
+  htmlhint
   htop
   httpie
   hugo
@@ -116,6 +120,7 @@ with pkgs;
   sqlite
   sshpass
   sshs
+  stylelint
   termshark
   terraform
   terraform-compliance
@@ -134,6 +139,8 @@ with pkgs;
   unzip
   uv
   virtualenv
+  vite
+  watch
   wget
   # wireshark # GUI conflicts with termshark/tshark CLI, use cask on macOS
   xh
@@ -152,13 +159,15 @@ with pkgs;
   mkdocs
   google-cloud-sdk
 ]
+++ lib.optionals (stdenv.isLinux && stdenv.hostPlatform.isx86_64) [
+  android-studio # pulls in pkgsi686Linux, x86-only
+  slack
+  steam
+]
 ++ lib.optionals stdenv.isLinux [
   # Homebrew equivalents available in nixpkgs for Linux.
-  android-studio
   brave
   codex
-  conftest
-  crane
   dbeaver-bin
   discord
   figma-linux
@@ -166,26 +175,20 @@ with pkgs;
   freelens-bin
   gemini-cli
   ghostty
-  gitea-actions-runner # Homebrew act_runner
   google-chrome
-  htmlhint
   kdePackages.kdenlive
   microsoft-edge
   mqtt-explorer
   obs-studio
   openvpn
   signal-desktop
-  slack
   spotify
-  steam
-  stylelint
   tailscale
   teams-for-linux
   telegram-desktop
   vscode
-  wasistlos # formerly whatsapp-for-linux
-  watch
+  karere # WhatsApp client; replaces removed wasistlos
   wireshark
   zenmap
-  qmd
+  # qmd # not in nixpkgs
 ]

@@ -28,8 +28,14 @@ in
   homebrew = {
     enable = true;
     taps = [
-      "nikitabobko/tap"
-      "timvw/tap"
+      {
+        name = "nikitabobko/tap";
+        trusted = true;
+      }
+      {
+        name = "timvw/tap";
+        trusted = true;
+      }
     ];
     brews = pkgs.callPackage ./brews.nix { };
     casks = pkgs.callPackage ./casks.nix { };
