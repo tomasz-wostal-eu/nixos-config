@@ -82,9 +82,138 @@ in
           ];
           stateVersion = "23.11";
           shellAliases = shared.shellAliases;
+          sessionPath = [ "$HOME/.local/bin" ];
         };
         imports = [ lazyvim.homeManagerModules.default ];
         programs = shared.programs;
+
+        # Pull Google Calendar into ~/.local/share/calendars every 15 min so
+        # khal has fresh data. darwin only: the OAuth token lives on this host.
+        launchd.agents.vdirsyncer = {
+          enable = true;
+          config = {
+            ProgramArguments = [
+              "${pkgs.writeShellScript "vdirsyncer-sync" ''
+                # launchd hands over a bare PATH; the config's `.fetch` hooks
+                # shell out to `cat` for the OAuth client id/secret.
+                export PATH="${pkgs.coreutils}/bin:$PATH"
+                vd=${pkgs.vdirsyncer}/bin/vdirsyncer
+                echo "=== $(date '+%Y-%m-%d %H:%M:%S') vdirsyncer sync ==="
+                # -v ERROR: Google returns duplicate hrefs, and the resulting
+                # ~100 "Skipping identical href" warnings per run would bloat the log.
+                "$vd" -v ERROR sync && exit 0
+
+                # Changing `collections` in the config makes every later sync
+                # abort with "Detected change in config file, please run
+                # discover" — deliberate on vdirsyncer's part, but as a timed
+                # agent it just fails silently every cycle until noticed.
+                # Discover is run only on failure, never pre-emptively: doing it
+                # each cycle would defeat that guard and silently adopt any new
+                # remote calendar. Note the retry DOES accept new collections.
+                echo "sync nieudany -> discover + jedna ponowna proba"
+                yes | "$vd" -v ERROR discover >/dev/null 2>&1 || true
+                exec "$vd" -v ERROR sync
+              ''}"
+            ];
+            RunAtLoad = true;
+            StartInterval = 900;
+            StandardOutPath = "/Users/${user}/Library/Logs/vdirsyncer.log";
+            StandardErrorPath = "/Users/${user}/Library/Logs/vdirsyncer.log";
+            ProcessType = "Background";
+            LowPriorityIO = true;
+          };
+        };
+
+        # Mail sync. Deliberately NOT `gmi sync`: that pushes before it pulls,
+        # so a local state that is behind (interrupted pull, fresh clone) reads
+        # as mass local deletion and trashes those messages in Gmail — which is
+        # exactly what happened on 2026-08-26. Pulling first and pushing only
+        # after the pull succeeded makes that ordering impossible.
+        launchd.agents.mailsync = {
+          enable = true;
+          config = {
+            ProgramArguments = [
+              "${pkgs.writeShellScript "mailsync" ''
+                export PATH="${pkgs.coreutils}/bin:$PATH"
+                gmi=${pkgs.lieer}/bin/gmi
+                echo "=== $(date '+%Y-%m-%d %H:%M:%S') mailsync ==="
+                rc=0
+                for repo in gmail itomm; do
+                  d="$HOME/Mail/$repo"
+                  [ -d "$d" ] || continue
+                  if "$gmi" pull -C "$d" -q -s; then
+                    "$gmi" push -C "$d" -q -s || { echo "push nieudany: $repo"; rc=1; }
+                  else
+                    # No push on a failed pull — that is the whole point.
+                    echo "pull nieudany: $repo (pomijam push)"
+                    rc=1
+                  fi
+                done
+                ${pkgs.notmuch}/bin/notmuch new --quiet || rc=1
+                exit $rc
+              ''}"
+            ];
+            RunAtLoad = true;
+            StartInterval = 300;
+            StandardOutPath = "/Users/${user}/Library/Logs/mailsync.log";
+            StandardErrorPath = "/Users/${user}/Library/Logs/mailsync.log";
+            ProcessType = "Background";
+            LowPriorityIO = true;
+          };
+        };
+
+        # git-bug keeps issues as git refs, so "syncing with Codeberg" is just a
+        # fetch/push of refs/bugs — no Forgejo API involved (bugwarrior has no
+        # gitea service at all). Each repo is handled independently so one dead
+        # remote cannot abort the rest, then bugwarrior imports into taskwarrior.
+        launchd.agents.bugsync = {
+          enable = true;
+          config = {
+            ProgramArguments = [
+              "${pkgs.writeShellScript "bugsync" ''
+                export PATH="${pkgs.coreutils}/bin:${pkgs.git}/bin:${pkgs.git-bug}/bin:${pkgs.taskwarrior2}/bin:$PATH"
+                echo "=== $(date '+%Y-%m-%d %H:%M:%S') bugsync ==="
+                rc=0
+                # Transport is plain `git`, not `git-bug pull/push`. git-bug uses
+                # go-git, which insists on an SSH agent and will not read the key
+                # file itself — and launchd agents do not inherit SSH_AUTH_SOCK
+                # (`launchctl getenv SSH_AUTH_SOCK` is empty), so git-bug's own
+                # transport fails here with "SSH agent requested but
+                # SSH_AUTH_SOCK not-specified". git shells out to OpenSSH, which
+                # reads ~/.ssh/personal directly and works unattended.
+                # Refspecs are deliberately non-forced: a bug edited on two
+                # machines gets rejected rather than clobbered — resolve those
+                # interactively with `git bug pull`, where the agent is present.
+                # --no-verify skips pre-push hooks: several repos lint code there
+                # (terraform fmt, bun) and those tools are not on the launchd
+                # PATH — but we are pushing bug refs, not code, so running a code
+                # linter over them is meaningless anyway.
+                refs="refs/bugs/*:refs/bugs/* refs/identities/*:refs/identities/*"
+                for r in cd-homelab drift-warden hydro-habitat \
+                         iac-hetzner mistwolf-tech mistwolf-video-producer \
+                         nexus-hetzner publishing-queue wostal-cloud wostal-eu; do
+                  d="$HOME/projects/$r"
+                  [ -d "$d/.git" ] || continue
+                  ( cd "$d" \
+                      && git fetch -q origin $refs 2>/dev/null \
+                      && git push -q --no-verify origin $refs 2>/dev/null ) \
+                    || { echo "sync nieudany: $r"; rc=1; }
+                done
+                ${pkgs.python3Packages.bugwarrior}/bin/bugwarrior pull || rc=1
+                # Codeberg's native tracker — the issues actually worked from.
+                # bugwarrior cannot see these at all (no forgejo service).
+                "$HOME/.local/bin/codeberg-tasks" || rc=1
+                exit $rc
+              ''}"
+            ];
+            RunAtLoad = true;
+            StartInterval = 300;
+            StandardOutPath = "/Users/${user}/Library/Logs/bugsync.log";
+            StandardErrorPath = "/Users/${user}/Library/Logs/bugsync.log";
+            ProcessType = "Background";
+            LowPriorityIO = true;
+          };
+        };
 
         # Marked broken Oct 20, 2022 check later to remove this
         # https://github.com/nix-community/home-manager/issues/3344

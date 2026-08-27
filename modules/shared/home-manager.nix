@@ -47,6 +47,33 @@ let
     kc = "kubectx";
     kns = "kubens";
     ke = "kubectl exec -it";
+
+    # Calendar (gcalcli)
+    gcal = "gcalcli calw"; # current week
+    gcalm = "gcalcli calm"; # current month
+    gcala = "gcalcli agenda"; # agenda from now on
+    gcalt = "gcalcli agenda today tomorrow"; # today only
+    gcalq = "gcalcli quick"; # gcalq "Lunch tomorrow 1pm"
+    gcals = "gcalcli search";
+    gcalls = "gcalcli list";
+
+    # Calendar (khal + vdirsyncer) — offline mirror in ~/.local/share/calendars
+    # `kh` prefix, not `k`: the k* namespace already belongs to kubectl/kubectx.
+    kh = "khal calendar"; # month view + agenda
+    khl = "khal list today 7d"; # next 7 days
+    khi = "ikhal"; # interactive TUI
+    vsync = "vdirsyncer sync"; # pull changes from Google
+
+    # Mail (neomutt + notmuch + lieer)
+    m = "neomutt";
+    # Default to the one-way pull. `gmi sync` pushes local tags to Gmail BEFORE
+    # pulling, so if the local notmuch state is behind — e.g. after an
+    # interrupted first sync — it reads the gap as local deletions and trashes
+    # those messages remotely. Use mpush only when local state is known good.
+    msync = "gmi pull -C ~/Mail/gmail";
+    mpush = "gmi sync -C ~/Mail/gmail";
+    nm = "notmuch";
+    nms = "notmuch search";
   };
 in
 {
@@ -67,7 +94,6 @@ in
         # GPG TTY for signing over SSH
         export GPG_TTY=$(tty)
 
-        path+=("$HOME/.local/bin")
         path+=("$HOME/.cache/npm/global/bin/")
         if [[ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
@@ -343,6 +369,18 @@ in
           {
             name = "actions";
             startup_script = "gh enhance";
+          }
+        ];
+        # A dedicated session rather than a `window`: window entries are only
+        # created for sessions that list them in `windows`, and no session
+        # config does, so as a window `inbox` was unreachable from both
+        # `sesh list` and `sesh window`.
+        session = [
+          {
+            # neomutt | khal / task, calendar and tasks on a refresh loop
+            name = "inbox";
+            path = "~";
+            startup_command = "~/.local/bin/tmux-inbox";
           }
         ];
         # session = [
@@ -661,7 +699,6 @@ in
         python
         luadoc
         scheme
-        muttrc
         angular
         comment
         graphql
@@ -1057,6 +1094,8 @@ in
     antigravity-cli.enable = true; # formerly gemini-cli
     fzf = {
       enable = true;
+      # Atuin owns Ctrl-R for shell history
+      historyWidget.command = "";
       tmux = {
         enableShellIntegration = true;
       };

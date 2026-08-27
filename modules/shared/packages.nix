@@ -19,6 +19,7 @@ with pkgs;
   cargo
   # checkov # python3.13-av fails OOM on aarch64-darwin; use: pipx install checkov
   cmatrix
+  codex
   conftest
   coreutils
   crane
@@ -34,8 +35,10 @@ with pkgs;
   ffmpeg
   font-awesome
   fzf
+  gcalcli # Google Calendar CLI; needs own OAuth client -> `gcalcli init`
   gcc
   gh
+  git-bug # issues stored as git objects; rides to Codeberg over plain git refs
   gitea-actions-runner # Homebrew act_runner / gitea-runner
   gitleaks
   gnupg
@@ -50,9 +53,11 @@ with pkgs;
   httpie
   hugo
   imagemagick
+  inter
   jetbrains-mono
   jq
   just
+  khal # terminal calendar; reads the vdir synced by vdirsyncer
   k3d
   k6
   kargo
@@ -87,12 +92,17 @@ with pkgs;
   lazygit
   lazyhetzner
   lima
+  lieer # Gmail <-> notmuch sync over the Gmail API (gmi)
   lolcat
   lsof
   mc # midnight-commander
   meslo-lgs-nf
+  mongosh
+  msmtp # SMTP sender for neomutt; XOAUTH2 against Gmail
+  neomutt
   nerd-fonts.jetbrains-mono
   nmap
+  notmuch
   nodejs_24
   noto-fonts
   obsidian
@@ -103,12 +113,14 @@ with pkgs;
   packer
   pass
   pipx
+  pnpm
   podman
   podman-compose
   podman-tui
   poetry
   ponysay
   posting
+  postgresql
   python3
   qemu
   ripgrep
@@ -129,6 +141,13 @@ with pkgs;
   terraform-ls
   terraform-lsp
   terragrunt
+  # taskwarrior 2, not 3, on purpose: bugwarrior talks to it through the `taskw`
+  # library, which writes the 2.x .data files. A taskwarrior 3 install reads
+  # taskchampion.sqlite3 instead and silently shows "No matches" for everything
+  # bugwarrior writes — verified, not theoretical.
+  taskwarrior2
+  taskwarrior-tui
+  python3Packages.bugwarrior # git-bug -> taskwarrior; no gitea/forgejo service exists upstream
   tesseract
   tflint
   tfsec
@@ -138,10 +157,13 @@ with pkgs;
   unimatrix
   unzip
   uv
+  vdirsyncer # CalDAV sync into ~/.local/share/calendars; OAuth creds live outside the store
+  vhs
   virtualenv
-  vite
+  # vite # nixpkgs "vite" is ViTE (Qt trace explorer, fails to build on darwin), not the JS bundler; use `npm create vite` per project
   watch
   wget
+  whisper-cpp
   # wireshark # GUI conflicts with termshark/tshark CLI, use cask on macOS
   xh
   yamllint
@@ -166,8 +188,8 @@ with pkgs;
 ]
 ++ lib.optionals stdenv.isLinux [
   # Homebrew equivalents available in nixpkgs for Linux.
+  audacity
   brave
-  codex
   dbeaver-bin
   discord
   figma-linux

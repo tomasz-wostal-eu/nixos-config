@@ -27,6 +27,7 @@ _:
   "signal"
   "slack"
   "telegram-desktop"
+  "thunderbird"
   "whatsapp"
 
   # Cloud & DevOps
@@ -49,6 +50,7 @@ _:
   "macfuse"
 
   # Media & Creative
+  "audacity"
   "kdenlive"
   "obs"
   "spotify"

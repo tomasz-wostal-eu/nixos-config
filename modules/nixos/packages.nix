@@ -54,6 +54,7 @@ shared-packages ++ [
   # Development tools
   firefox
   git-wt
+  thunderbird
   
   # Music and entertainment
 ]

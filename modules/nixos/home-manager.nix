@@ -16,6 +16,7 @@ in
     file = shared-files // import ./files.nix { inherit user; };
     stateVersion = "25.11";
     shellAliases = shared.shellAliases;
+    sessionPath = [ "$HOME/.local/bin" ];
   };
 
   programs = shared.programs // {
