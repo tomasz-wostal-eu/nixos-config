@@ -80,6 +80,12 @@ def main():
         sys.exit("nie znalazlem repozytoriow z remote na codeberg.org")
 
     open_issues = {}
+    # Repos whose issue list could not be fetched. Their tasks must be left
+    # alone below: an empty result from a failed request is indistinguishable
+    # from "no open issues", and treating it as the latter closes every task
+    # for that repo. That is not hypothetical — a Codeberg outage on
+    # 2026-08-27 made all 11 repos return 502 and closed 19 tasks in one run.
+    failed = set()
     for slug, local in repos.items():
         owner, name = slug.split("/", 1)
         page = 1
@@ -91,9 +97,11 @@ def main():
                 batch = api(f"/repos/{owner}/{name}/issues?{q}", tok)
             except urllib.error.HTTPError as e:
                 print(f"  {slug}: HTTP {e.code} (pomijam)")
+                failed.add(slug)
                 break
             except Exception as e:
                 print(f"  {slug}: {e} (pomijam)")
+                failed.add(slug)
                 break
             for i in batch:
                 if i.get("pull_request"):
@@ -125,13 +133,27 @@ def main():
         task(*args)
         added += 1
 
+    skipped = 0
     for key, row in have.items():
-        if key not in open_issues and row.get("status") == "pending":
-            task(row["uuid"], "done")
-            closed += 1
+        if row.get("status") != "pending":
+            continue
+        if key in open_issues:
+            continue
+        # Only a repo we actually heard back from can prove an issue is gone.
+        if key.rsplit("#", 1)[0] in failed:
+            skipped += 1
+            continue
+        task(row["uuid"], "done")
+        closed += 1
 
     print(f"repozytoria: {len(repos)}  otwartych issue: {len(open_issues)}  "
-          f"dodano: {added}  zamknieto: {closed}")
+          f"dodano: {added}  zamknieto: {closed}"
+          + (f"  nietkniete (repo bez odpowiedzi): {skipped}" if skipped else ""))
+
+    if failed:
+        # Non-zero so the launchd log shows the run as failed rather than as a
+        # clean sync that happened to close nothing.
+        sys.exit(f"repozytoria bez odpowiedzi: {', '.join(sorted(failed))}")
 
 
 if __name__ == "__main__":
