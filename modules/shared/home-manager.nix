@@ -363,12 +363,8 @@ in
             startup_script = "lazygit";
           }
           {
-            name = "gh-dash";
-            startup_script = "gh dash";
-          }
-          {
-            name = "actions";
-            startup_script = "gh enhance";
+            name = "tea-dash";
+            startup_script = "tea-dash";
           }
         ];
         # A dedicated session rather than a `window`: window entries are only
@@ -395,7 +391,7 @@ in
         #     startup_command = "wt status";
         #     windows = [
         #       "shell"
-        #       "gh-dash"
+        #       "tea-dash"
         #     ];
         #   }
         #   {
@@ -404,7 +400,7 @@ in
         #     startup_command = "wt status";
         #     windows = [
         #       "shell"
-        #       "gh-dash"
+        #       "tea-dash"
         #     ];
         #   }
         # ];
@@ -434,10 +430,7 @@ in
 
     gh = {
       enable = true;
-      extensions = with pkgs; [
-        gh-dash
-        gh-enhance
-      ];
+      extensions = [ ];
       gitCredentialHelper = {
         enable = true;
       };

@@ -530,37 +530,55 @@ in
         head: "bold #c6a0f6"
     '';
 
-  ".config/gh-dash/config.yml".text = ''
+  # gh-dash for Codeberg. No instance URL or token here on purpose: tea-dash
+  # reads both from tea's own config, so `tea login list` stays the single
+  # source of truth and no credential lands in the world-readable /nix/store.
+  # `login` is named explicitly because that login is not marked default.
+  ".config/tea-dash/config.yml".text = ''
+    instance:
+      login: codeberg
     prSections:
       - title: My PRs
-        filters: is:open author:@me
+        filter:
+          state: open
+          createdBy: "@me"
       - title: Needs Review
-        filters: is:open review-requested:@me
+        filter:
+          reviewRequested: "@me"
       - title: All Open
-        filters: is:open
+        filter:
+          state: open
     issuesSections:
       - title: My Issues
-        filters: is:open author:@me
+        filter:
+          state: open
+          createdBy: "@me"
       - title: Assigned
-        filters: is:open assignee:@me
+        filter:
+          state: open
+          assignedBy: "@me"
+    # Only title/limit here — unlike gh-dash, tea-dash notification sections
+    # take no filters, so the old reason:review-requested / reason:mention
+    # splits have no equivalent and collapse into one list.
     notificationsSections:
-      - title: All
-        filters: ""
-      - title: Review Requested
-        filters: reason:review-requested
-      - title: Mentioned
-        filters: reason:mention
+      - title: Inbox
+        limit: 20
     defaults:
       preview:
         open: true
-        width: 0.45
+        # Columns, not a fraction: gh-dash's 0.45 would be read as 0 here,
+        # which happens to mean "automatic 50/50" — spelled out instead.
+        width: 0
       prsLimit: 20
       issuesLimit: 20
       notificationsLimit: 20
       view: prs
       refetchIntervalMinutes: 30
+    # No global `repos:` list: with one set, sections without their own repo:
+    # fan out over just those repos instead of searching the whole instance,
+    # which would quietly narrow "All Open".
     repoPaths:
-      mistwolftech/*: ~/projects/*
+      "mistwolftech/*": ~/projects/{{.Repo}}
     keybindings:
       prs:
         - key: g
@@ -573,20 +591,10 @@ in
           name: claude review
           command: >-
             tmux new-window '
-              cd {{.RepoPath}} && claude "Review PR {{.PrNumber}}. Run gh pr view {{.PrNumber}} for description and gh pr diff {{.PrNumber}} for changes. Provide a thorough code review."
-            '
-        - key: T
-          name: actions
-          command: >-
-            tmux new-window '
-              gh enhance -R {{.RepoName}} {{.PrNumber}}
+              cd {{.RepoPath}} && claude "Review PR {{.PrNumber}} in {{.RepoName}}. Run: tea pulls {{.PrNumber}} --comments for the description, and git fetch origin pull/{{.PrNumber}}/head && git diff origin/main...FETCH_HEAD for the changes. Provide a thorough code review."
             '
     theme:
-      ui:
-        sectionsShowCount: true
-        table:
-          showSeparator: true
-          compact: false
+      icons: nerd
     confirmQuit: false
   '';
 

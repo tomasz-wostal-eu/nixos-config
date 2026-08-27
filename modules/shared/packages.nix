@@ -178,6 +178,7 @@ with pkgs;
   forgejo-cli
   git-wt
   tea
+  tea-dash # gh-dash for Codeberg; overlays/30-tea-dash.nix, reads tea's login
   mkdocs
   google-cloud-sdk
 ]
