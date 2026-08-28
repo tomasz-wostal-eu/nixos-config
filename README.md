@@ -153,6 +153,37 @@ taskwarrior match each other and the background. neomutt rejects `#rrggbb`
 outright without a `*-direct` terminfo, and 256-cube approximations render a
 visibly different black.
 
+### Tagging
+
+A `post-new` hook (`~/.config/notmuch/hooks/post-new`) applies 28 category tags
+from `~/.config/notmuch/tag-rules`, both generated from `notmuchTagRules` in
+`modules/shared/files.nix`. They cover 84% of the mailbox; the rest is a tail of
+826 domains with fewer than 20 messages each, which is not worth a rule.
+
+Rules key on **domains, not addresses** — notmuch matches address tokens, so
+`from:adobe.com` also catches `mail.adobe.com` and every other marketing
+subdomain a sender uses. Every rule ends in `and not tag:X`, which makes the
+hook idempotent: the first full pass over 41k messages took 55 s, every pass
+after that takes 0.2 s. The flip side is that a tag deleted by hand comes back
+on the next `notmuch new` — delete the rule instead.
+
+**These tags reach Gmail.** lieer pushes any tag not in its `ignore_tags` as a
+label and `/` nests it there, so a wrong rule is visible on the account and on
+the phone. Backfilling them is one enormous push: Gmail rate-limits it down to
+single-message batches and it runs for the better part of an hour, during which
+the repository lock makes every scheduled `mailsync` run abort. That is a
+one-time cost, not a steady-state one. To keep a tag local instead, add it with
+`gmi set --ignore-tags-local`.
+
+Nothing in the rules touches `inbox`, `unread` or `flagged` — removing those
+locally would archive or mark the mail in Gmail on the next push.
+
+The neomutt sidebar gets `People`, `Dev`, `Jobs`, `Finance` and `Shopping` views
+over the result. `People` is `tag:inbox` minus `automated` and `newsletter`,
+which is the half of the mailbox a human actually wrote. Each view lists its
+tags one by one because notmuch has no tag wildcard — `tag:dev/*` matches
+nothing rather than expanding.
+
 ### Dashboard
 
 `sesh` gains an **inbox** session: neomutt on the left, khal top-right, taskwarrior

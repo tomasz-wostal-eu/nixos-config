@@ -38,6 +38,66 @@ let
   # because it is part of macOS itself.
   htmlOpener = if pkgs.stdenv.isDarwin then "/usr/bin/open" else "${pkgs.xdg-utils}/bin/xdg-open";
 
+  homeDir = if pkgs.stdenv.isDarwin then "/Users/twostal" else "/home/twostal";
+
+  # Auto-tagging for notmuch, derived from what is actually in the mailbox:
+  # 41k messages from 1045 sender domains, where the top 30 domains carry over
+  # half the volume. Rules therefore key on domains, not on hand-listed
+  # addresses. `from:adobe.com` also matches `mail.adobe.com` — notmuch matches
+  # address tokens, so one entry covers a sender's marketing subdomains too.
+  #
+  # These tags DO reach Gmail: lieer pushes every tag that is not in its
+  # ignore_tags as a label, and `/` nests them there. That is deliberate here,
+  # but it means a wrong rule is visible on the account and on the phone, not
+  # just locally.
+  #
+  # Only additive: nothing here touches inbox/unread/flagged, because removing
+  # those would archive or mark mail in Gmail on the next push.
+  notmuchTagRules = {
+    "dev/github" = "from:github.com or from:email.github.com";
+    "dev/codeberg" = "from:codeberg.org";
+    "dev/security" = ''from:snyk.io or from:letsencrypt.org or from:security@ or subject:dependabot or subject:"security alert" or subject:CVE'';
+    "dev/cloud" = "from:hetzner.com or from:hetzner.de or from:ovh.pl or from:ovhcloud.com or from:digitalocean.com or from:nabucasa.com or from:ngrok.com or from:cloudflare.com or from:linode.com or from:scaleway.com";
+    "dev/vendor" = "from:atlassian.com or from:hashicorp.com or from:puppet.com or from:postman.com or from:smartbearmail.com or from:anthropic.com or from:docker.com or from:jetbrains.com or from:gitlab.com or from:openai.com or from:sourcegraph.com or from:grafana.com or from:elastic.co or from:mongodb.com or from:redis.com or from:microsoft.com or from:slack.com or from:influxdata.com or from:ollama.com or from:mozilla.org";
+    "alerts/infra" = "from:synologynotification.com or from:io.adafruit.com or from:uptimerobot.com or from:statuspage.io or from:pagerduty.com or from:betteruptime.com";
+    "jobs/recruiter" = "from:inhire.io or from:elitehunter.pl or from:eteaminc.com or from:jobleads.com or from:inmail-hit-reply@linkedin.com or from:hays.pl or from:antal.pl or from:devire.pl or from:hrk.pl";
+    "jobs/alerts" = "from:nofluffjobs.com or from:jobalerts-noreply@linkedin.com or from:jobs-listings@linkedin.com or from:justjoin.it or from:pracuj.pl or from:bulldogjob.pl or from:theprotocol.it";
+    "finance/banking" = "from:mbank.pl or from:pekao.com.pl or from:velobank.pl or from:gnb.pl or from:revolut.com or from:ing.pl or from:santander.pl or from:millenniumbank.pl or from:alior.pl or from:bnpparibas.pl";
+    "finance/payments" = "from:przelewy24.pl or from:payu.com or from:stripe.com or from:mastercard.pl or from:paypal.com or from:payments-noreply@google.com or from:tpay.com or from:blik.com";
+    # Subject-keyed, so it also catches invoices from the long tail of senders
+    # that no domain rule will ever cover.
+    "finance/invoices" = ''subject:faktura or subject:invoice or subject:rachunek or subject:"payment receipt" or subject:paragon'';
+    "shop/orders" = "from:allegro.pl or from:allegromail.pl or from:ceneo.pl or from:mediaexpert.pl or from:decathlon.pl or from:temuemail.com or from:botland.com.pl or from:kamami.com or from:kamami.pl or from:rebel.pl or from:ikea.pl or from:deichmann.pl or from:amazon.com or from:olx.pl or from:morele.net or from:x-kom.pl or from:empik.com";
+    "shop/promo" = "from:reeffactory.com or from:roslinyakwariowe.pl or from:yerbamatestore.pl or from:astrohunters.pl or from:trzmiel.com.pl or from:invital.pl or from:ostredzieje.pl or from:sony-europe.com or from:banggood.com or from:carrefour.pl or from:harley-davidson.com or from:iqos.com or from:easeus.com or from:ralphlauren.eu or from:kampanie. or from:deals.";
+    "shop/delivery" = "from:inpost.pl or from:paczkomaty.pl or from:dhl.pl or from:dpd.com.pl or from:ups.com or from:fedex.com or from:poczta-polska.pl or from:gls-poland.com";
+    "travel" = "from:booking.com or from:flixbus.com or from:airbnb.com or from:ryanair.com or from:wizzair.com or from:lot.com or from:intercity.pl or from:koleo.pl or from:trivago.com";
+    "events" = "from:bandsintown.com or from:ticketmaster.de or from:ticketmaster.pl or from:multikino.pl or from:knockoutprod.net or from:eventim.pl or from:goingapp.pl or from:eventbrite.com";
+    "food" = "from:pyszne.pl or from:glovoapp.com or from:bolt.eu or from:ubereats.com or from:wolt.com or from:mcdonalds.pl or from:zabka.pl";
+    "services" = "from:booksy.com or from:cityfit.info.pl or from:medicover.pl or from:luxmed.pl or from:enel-med.pl";
+    "telecom" = "from:t-mobile.pl or from:orange.pl or from:play.pl or from:plus.pl or from:vectra.pl or from:upc.pl";
+    "news" = "from:oko.press or from:wyborcza.pl or from:sekurak.pl or from:programistamag.pl or from:patronite.pl or from:patronite.email or from:bookbeat.com or from:fourhourseo.com or from:mailliberland.org or from:substack.com or from:medium.com or from:tvn24.pl or from:onet.pl or from:interia.pl";
+    # LinkedIn's job addresses are excluded so an offer lands in jobs/*, not here.
+    "social" = "from:discord.com or from:redditmail.com or from:deviantart.com or from:spotify.com or from:youtube.com or from:roblox.com or from:steampowered.com or from:amateri.com or from:facebookmail.com or from:instagram.com or from:x.com or from:mastodon.social or (from:linkedin.com and not from:jobalerts-noreply@linkedin.com and not from:jobs-listings@linkedin.com and not from:inmail-hit-reply@linkedin.com)";
+    "security/account" = ''from:accounts.google.com or from:accountprotection.microsoft.com or from:bitwarden.com or from:authy.com or from:1password.com or subject:"verification code" or subject:"kod weryfikacyjny" or subject:"two-factor" or subject:logowanie'';
+    "calendar" = "from:calendar-notification@google.com or from:calendar-noreply@google.com or attachment:invite.ics";
+    "family" = "from:families-noreply@google.com or from:life360.com or from:gokidz.pl or from:librus.pl or from:vulcan.edu.pl";
+    "creative" = "from:adobe.com or from:creativemarket.com or from:visme.co or from:invideo.io or from:canva.com or from:figma.com";
+    "google/services" = "from:googleplay-noreply@google.com or from:workspace-noreply@google.com or from:googleone-updates-noreply@google.com or from:noreply-maps-timeline@google.com or from:noreply-local-guides@google.com or from:actions-noreply@google.com or from:googleassistant-noreply@google.com or from:CloudPlatform-noreply@google.com";
+    "newsletter" = "from:newsletter or from:news. or from:mailchimp or from:sendgrid.net or from:mailerlite.com or from:getresponse.com or subject:newsletter";
+    # Cuts the mailbox in half: `not tag:automated` is what is left when every
+    # machine-sent message is out of the way.
+    "automated" = "from:noreply or from:no-reply or from:donotreply or from:do-not-reply or from:notifications or from:mailer-daemon";
+  };
+
+  # `and not tag:X` is what makes a run idempotent and cheap: a message is only
+  # touched the first time a rule matches it, so the hook can run on every
+  # `notmuch new` and still costs nothing once the backlog is tagged. It also
+  # means a tag removed by hand does come back — remove the rule to make it
+  # stick.
+  notmuchTagBatch = pkgs.lib.concatStrings (
+    pkgs.lib.mapAttrsToList (tag: query: "+${tag} -- (${query}) and not tag:${tag}\n") notmuchTagRules
+  );
+
   # (An xterm-256 approximation table used to live here for neomutt. It was
   # dropped: the 256-cube nearest neighbours are visibly off — notably base
   # #24273a landing on the neutral grey color235 — which left a seam between the
@@ -758,10 +818,16 @@ in
     primary_email=tomasz@wostal.eu
     other_email=tomasz.wostal@itomm.pl;tomasz.wostal@gmail.com;tomasz.wostal@devops.toys;tomasz.wostal@mistwolf.tech;support@wostal.eu;info@wostal.eu;support@mistwolf.tech;info@mistwolf.tech
 
+    # Runs post-new below. The default is <mail_root>/.notmuch/hooks, which is
+    # inside the maildir lieer owns; keeping hooks in ~/.config keeps them under
+    # nix and out of the synced tree.
+    hook_dir=${homeDir}/.config/notmuch/hooks
+
     [new]
     # Deliberately empty: lieer derives tags from Gmail labels, and any tag added
     # here would be pushed back to Gmail as a stray label ("new" is not on
-    # lieer's ignore list). Mail arriving via mbsync would need a post-new hook.
+    # lieer's ignore list). Categorisation happens in the post-new hook instead,
+    # where the tags are chosen deliberately and are meant to reach Gmail.
     tags=
     ignore=/.*[.](json|lock|bak|tmp)$/;.uidvalidity;.mbsyncstate;.notmuch
 
@@ -770,6 +836,14 @@ in
 
     [maildir]
     synchronize_flags=true
+  '';
+
+  # Kept as a readable file rather than an anonymous store path so the rules can
+  # be inspected (and dry-run with `notmuch count`) without rebuilding.
+  ".config/notmuch/tag-rules".text = notmuchTagBatch;
+
+  ".config/notmuch/hooks/post-new".source = pkgs.writeShellScript "notmuch-post-new" ''
+    exec ${pkgs.notmuch}/bin/notmuch tag --batch --input=${homeDir}/.config/notmuch/tag-rules
   '';
 
   # Empty marker so the directory exists for neomutt's header cache.
@@ -861,6 +935,17 @@ in
     virtual-mailboxes "· itomm"     "notmuch://?query=tag:inbox and not tag:trash and path:itomm/**"
     virtual-mailboxes "· gmail new" "notmuch://?query=tag:unread and not tag:trash and path:gmail/**"
     virtual-mailboxes "· itomm new" "notmuch://?query=tag:unread and not tag:trash and path:itomm/**"
+
+    # Views over the tags applied by the post-new hook. Each group is spelled
+    # out because notmuch has no wildcard for tags: `tag:dev/*` matches nothing,
+    # it does not expand.
+    # "People" is the one that earns its place — roughly half the mailbox is
+    # machine-sent, and this is the inbox with that half removed.
+    virtual-mailboxes "People"   "notmuch://?query=tag:inbox and not tag:automated and not tag:newsletter and not tag:trash"
+    virtual-mailboxes "Dev"      "notmuch://?query=(tag:dev/github or tag:dev/codeberg or tag:dev/security or tag:dev/cloud or tag:dev/vendor or tag:alerts/infra) and not tag:trash"
+    virtual-mailboxes "Jobs"     "notmuch://?query=(tag:jobs/recruiter or tag:jobs/alerts) and not tag:trash"
+    virtual-mailboxes "Finance"  "notmuch://?query=(tag:finance/banking or tag:finance/payments or tag:finance/invoices) and not tag:trash"
+    virtual-mailboxes "Shopping" "notmuch://?query=(tag:shop/orders or tag:shop/delivery or tag:shop/promo) and not tag:trash"
 
     # ---------------------------------------------------------------- behaviour
     set sort          = threads
