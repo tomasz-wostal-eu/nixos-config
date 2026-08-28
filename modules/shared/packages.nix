@@ -161,6 +161,7 @@ with pkgs;
   vhs
   virtualenv
   # vite # nixpkgs "vite" is ViTE (Qt trace explorer, fails to build on darwin), not the JS bundler; use `npm create vite` per project
+  w3m # renders text/html for neomutt's mailcap (and handy on its own)
   watch
   wget
   whisper-cpp

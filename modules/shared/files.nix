@@ -34,6 +34,10 @@ let
     crust = "#181926";
   };
 
+  # Hand a file to the desktop's default handler. `open` is not a store path
+  # because it is part of macOS itself.
+  htmlOpener = if pkgs.stdenv.isDarwin then "/usr/bin/open" else "${pkgs.xdg-utils}/bin/xdg-open";
+
   # (An xterm-256 approximation table used to live here for neomutt. It was
   # dropped: the 256-cube nearest neighbours are visibly off — notably base
   # #24273a landing on the neutral grey color235 — which left a seam between the
@@ -771,6 +775,48 @@ in
   # Empty marker so the directory exists for neomutt's header cache.
   ".cache/neomutt/.keep".text = "";
 
+  # neomutt renders no HTML on its own. `auto_view text/html` only means "run
+  # whatever mailcap says for that type", so without a mailcap entry the pager
+  # just prints "[-- text/html is unsupported --]" — which is exactly what it
+  # did, since neither ~/.mailcap nor an entry in the neomutt config existed.
+  # `copiousoutput` is the flag that makes the output go through the pager
+  # inline instead of spawning a viewer; auto_view only considers entries that
+  # carry it. The browser entry is listed first because interactive
+  # <view-mailcap> takes the first match, while auto_view skips it for lack of
+  # copiousoutput — so both routes get the viewer they should.
+  ".config/neomutt/mailcap".text = ''
+    text/html; ${htmlOpener} %s; nametemplate=%s.html
+    text/html; ${pkgs.w3m}/bin/w3m -I %{charset} -T text/html -dump -o display_link_number=1 %s; nametemplate=%s.html; copiousoutput
+  '';
+
+  # Open the HTML part of the current message in the real browser, for the mail
+  # that only makes sense with images and layout. Pipes the raw message in
+  # rather than driving the attachment menu with <search>, which breaks as soon
+  # as a message nests its parts differently. The rendered copy goes to a fixed
+  # 0600 path under ~/.cache, not to /tmp: mail bodies are private and a
+  # per-invocation temp file would just accumulate.
+  ".local/bin/mail-html-open".source = pkgs.writeScript "mail-html-open" ''
+    #!${pkgs.python3}/bin/python3
+    import email
+    import email.policy
+    import os
+    import subprocess
+    import sys
+
+    msg = email.message_from_binary_file(sys.stdin.buffer, policy=email.policy.default)
+    body = msg.get_body(preferencelist=("html",))
+    if body is None:
+        sys.exit("ta wiadomosc nie ma czesci text/html")
+
+    out = os.path.expanduser("~/.cache/neomutt/preview.html")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8", errors="replace") as fh:
+        fh.write(body.get_content())
+
+    subprocess.run(["${htmlOpener}", out], check=False)
+  '';
+
   ".config/neomutt/neomuttrc".text = ''
     # ---------------------------------------------------------------- identity
     set realname = "Tomasz Wostal"
@@ -822,8 +868,15 @@ in
     set mark_old      = no
     set help          = no
     set mail_check_stats = yes
+    # Without mailcap_path neomutt looks at ~/.mailcap and /etc/mailcap only,
+    # neither of which exists here, so auto_view would silently do nothing.
+    set mailcap_path = "~/.config/neomutt/mailcap"
     auto_view text/html
     alternative_order text/plain text/enriched text/html
+    # …but a multipart/alternative mail whose text/plain half is the usual
+    # "view this in a browser" stub still reads better as HTML: <esc>h renders
+    # the current message's HTML part in the real browser.
+    macro index,pager <esc>h "<pipe-message>~/.local/bin/mail-html-open<enter>" "HTML w przegladarce"
 
     # ---------------------------------------------------------------- sidebar
     set sidebar_visible = yes
