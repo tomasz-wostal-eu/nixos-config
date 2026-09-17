@@ -62,6 +62,9 @@ nix run .#build-switch
 # Update flake inputs
 nix flake update
 
+# Bump the packages built from overlays/ (flake update does not touch those)
+nix run .#update-overlays
+
 # Clean old generations
 nix run .#clean
 ```

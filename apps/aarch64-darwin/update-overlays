@@ -1,0 +1,102 @@
+#!/bin/sh -e
+
+GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
+RED='\033[1;31m'
+NC='\033[0m'
+
+# Bumps the packages this repo builds itself (overlays/), which `nix flake
+# update` never touches — that one only moves the flake inputs. Pass package
+# names to limit the run, otherwise every updatable overlay package is tried.
+#
+# "Updatable" means: defined in overlays/ (meta.position points back into this
+# repo) and carrying a `version` attribute. That deliberately skips packages an
+# overlay only *modifies* — poetry and python31x from 20-pipx-skip-tests.nix
+# belong to nixpkgs, and nix-update would try to rewrite a read-only store path.
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+cd "$ROOT"
+
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/update-overlays.XXXXXX")
+trap 'rm -rf "$TMP"' EXIT
+
+# nix-update --file expects a function, and calls it with its own arguments.
+cat > "$TMP/pkgs.nix" <<'NIX'
+{ ... }:
+let
+  root = @ROOT@;
+  flake = builtins.getFlake (toString root);
+  dir = root + "/overlays";
+  files = builtins.filter (n: builtins.match ".*\\.nix" n != null)
+    (builtins.attrNames (builtins.readDir dir));
+in
+import flake.inputs.nixpkgs {
+  system = builtins.currentSystem;
+  overlays = map (f: import (dir + ("/" + f))) files;
+  config.allowUnfree = true;
+}
+NIX
+
+cat > "$TMP/discover.nix" <<'NIX'
+let
+  root = @ROOT@;
+  rootStr = toString root;
+  dir = root + "/overlays";
+  files = builtins.filter (n: builtins.match ".*\\.nix" n != null)
+    (builtins.attrNames (builtins.readDir dir));
+  # Overlays are `final: prev: { ... }`; attribute names are available without
+  # forcing any value, so empty sets are enough to enumerate them.
+  names = builtins.concatLists
+    (map (f: builtins.attrNames (import (dir + ("/" + f)) { } { })) files);
+  pkgs = import (@TMP@ + "/pkgs.nix") { };
+  ours = name:
+    let
+      r = builtins.tryEval (
+        let p = pkgs.${name}; in
+        (p ? version)
+        && (builtins.substring 0 (builtins.stringLength rootStr) (p.meta.position or "") == rootStr)
+      );
+    in r.success && r.value;
+in builtins.filter ours names
+NIX
+
+for f in "$TMP/pkgs.nix" "$TMP/discover.nix"; do
+  sed -i.bak -e "s|@ROOT@|$ROOT|g" -e "s|@TMP@|$TMP|g" "$f"
+  rm -f "$f.bak"
+done
+
+if [ $# -gt 0 ]; then
+  TARGETS="$*"
+else
+  echo "${YELLOW}Looking for overlay packages to update...${NC}"
+  TARGETS=$(nix --extra-experimental-features 'nix-command flakes' eval \
+    --impure --json --file "$TMP/discover.nix" | tr -d '[]"' | tr ',' ' ')
+fi
+
+if [ -z "$TARGETS" ]; then
+  echo "${YELLOW}No updatable packages in overlays/.${NC}"
+  exit 0
+fi
+
+echo "${YELLOW}Updating:${NC} $TARGETS"
+
+FAILED=""
+for pkg in $TARGETS; do
+  echo "${YELLOW}==> $pkg${NC}"
+  # --inputs-from . so nix-update itself comes from this flake's pinned
+  # nixpkgs rather than whatever the user's registry points at.
+  if ! nix --extra-experimental-features 'nix-command flakes' run \
+      --inputs-from . nixpkgs#nix-update -- --file "$TMP/pkgs.nix" "$pkg"; then
+    FAILED="$FAILED $pkg"
+  fi
+done
+
+echo
+git --no-pager diff --stat -- overlays/
+
+if [ -n "$FAILED" ]; then
+  echo "${RED}Failed:${NC}$FAILED"
+  exit 1
+fi
+
+echo "${GREEN}Done. Review the diff, then: nix run .#build-switch${NC}"

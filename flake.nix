@@ -94,6 +94,7 @@
         "create-keys" = mkApp "create-keys" system;
         "check-keys" = mkApp "check-keys" system;
         "install" = mkApp "install" system;
+        "update-overlays" = mkApp "update-overlays" system;
       };
       mkDarwinApps = system: {
         "apply" = mkApp "apply" system;
@@ -104,6 +105,7 @@
         "create-keys" = mkApp "create-keys" system;
         "check-keys" = mkApp "check-keys" system;
         "rollback" = mkApp "rollback" system;
+        "update-overlays" = mkApp "update-overlays" system;
       };
     in
     {

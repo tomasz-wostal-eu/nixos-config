@@ -51,6 +51,16 @@ else
   echo -e "${YELLOW}Building for platform: $FLAKE_TARGET${NC}"
 fi
 
+# Bump the packages built from overlays/ first — `nix flake update` never
+# touches those, so without this they stay pinned forever. Non-fatal on
+# purpose: a failed bump (offline, upstream down, rate-limited) must not block
+# a rebuild. SKIP_OVERLAY_UPDATE=1 skips it entirely.
+if [ -z "$SKIP_OVERLAY_UPDATE" ]; then
+  if ! "$(dirname "$0")/update-overlays"; then
+    echo -e "${YELLOW}Overlay update failed - building with the pinned versions.${NC}"
+  fi
+fi
+
 echo -e "${YELLOW}Starting...${NC}"
 
 # We pass SSH from user to root so root can download secrets from our private Github
