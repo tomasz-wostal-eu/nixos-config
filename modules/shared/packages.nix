@@ -112,6 +112,9 @@ with pkgs;
   openssh
   packer
   pass
+  # https://github.com/earendil-works/pi — self-extensible coding agent CLI;
+  # binary is `pi`, multi-provider (Anthropic/OpenAI/Google/Bedrock/...)
+  pi-coding-agent
   pipx
   pnpm
   podman
@@ -165,6 +168,10 @@ with pkgs;
   watch
   wget
   whisper-cpp
+  # https://github.com/raine/workmux — one git worktree per task, each in its
+  # own tmux window; overlays/40-workmux.nix. Overlaps git-wt: wt manages the
+  # worktrees, workmux also drives the tmux side and per-task agent commands.
+  workmux
   # wireshark # GUI conflicts with termshark/tshark CLI, use cask on macOS
   xh
   yamllint

@@ -276,6 +276,12 @@ in
         set -ag terminal-overrides ",xterm-256color:Tc"
         set -ag terminal-overrides ",tmux-256color:Tc"
         set -ag terminal-overrides ",xterm-ghostty:Tc"
+        # Extended (CSI u) keys: without this tmux flattens modified Enter/Tab,
+        # so shift-enter etc. never reach TUIs like pi. `extkeys` tells tmux the
+        # outer terminal can carry them — ghostty and xterm-256color both can.
+        set -s extended-keys on
+        set -as terminal-features ",xterm-ghostty:extkeys"
+        set -as terminal-features ",xterm-256color:extkeys"
         set-environment -g COLORTERM truecolor
         set -g pane-active-border-style 'fg=magenta,bg=default'
         set -g pane-border-style 'fg=brightblack,bg=default'
