@@ -47,6 +47,13 @@ with pkgs;
   hadolint
   hcloud
   helmfile
+  # https://herdr.dev — keeps coding agents (Claude Code, Codex, 20+ others)
+  # running in the background per project and reattaches from another machine
+  # over SSH. In nixpkgs at 0.9.1, so no overlay; upstream is 0.9.3 and a plain
+  # `nix flake update` picks that up. Overlaps workmux on agent status: workmux
+  # tracks agents inside one tmux session via hooks, herdr owns the runtime that
+  # outlives the terminal.
+  herdr
   hetzner-kube
   htmlhint
   htop
