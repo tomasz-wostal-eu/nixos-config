@@ -662,6 +662,41 @@ in
     confirmQuit: false
   '';
 
+  # herdr — runtime that keeps coding agents (claude, codex, opencode, pi here)
+  # alive per project in the background and reattaches from another machine over
+  # SSH. Only values that differ from `herdr --default-config` are set; the rest
+  # stays on its documented default so upstream can move them.
+  #
+  # Agent status integrations are NOT here: `herdr integration install <agent>`
+  # writes executable hooks into ~/.claude/hooks, ~/.codex, ~/.config/opencode
+  # and ~/.pi, none of which home-manager owns. They are mutable state, like the
+  # workmux hooks in ~/.claude/settings.json.
+  ".config/herdr/config.toml".text = ''
+    # Configured declaratively, so the first-run wizard has nothing to ask.
+    onboarding = false
+
+    # Everything here is Catppuccin Macchiato, but herdr's built-in
+    # "catppuccin" is the Mocha flavour — its own default config documents
+    # #1e1e2e / #cdd6f4. These overrides move the tokens it exposes onto
+    # Macchiato so it matches tmux, k9s and tea-dash above.
+    [theme]
+    name = "catppuccin"
+
+    [theme.custom]
+    sidebar_bg    = "#1e2030" # mantle
+    active_row_bg = "#24273a" # base
+    selection_bg  = "#363a4f" # surface0
+    accent        = "#f5bde6" # pink
+    red           = "#ed8796"
+    green         = "#a6da95"
+
+    # nixpkgs owns the version here, so both background calls to herdr.dev are
+    # pure noise: `herdr update` cannot write into the read-only store, and a
+    # discovered release could only nag. Upgrades arrive with `nix flake update`.
+    [update]
+    version_check = false
+    manifest_check = false
+  '';
   # Google Calendar -> local vdir. OAuth client lives in GCP project
   # gcalcli-tw-2026 (published, so the refresh token never expires).
   # The CalDAV API must stay enabled on that project or discovery 403s.
