@@ -5,16 +5,16 @@
 final: prev: {
   workmux = prev.rustPlatform.buildRustPackage rec {
     pname = "workmux";
-    version = "0.1.260";
+    version = "0.1.269";
 
     src = prev.fetchFromGitHub {
       owner = "raine";
       repo = "workmux";
       tag = "v${version}";
-      hash = "sha256-58YT4pad85tyQCyMJWiQtgIoAjH9zZzu7kvg7ZK7208=";
+      hash = "sha256-Lmy69m6PTftoZVasYDei5zeUnv2ND3E+kvFDAuuQfNM=";
     };
 
-    cargoHash = "sha256-v3+q4EpN4LNI2xRBsCwDrO4pgvIAXI8wGC+uwSXmXvI=";
+    cargoHash = "sha256-9PcUNrRpG3jwOAFd5PO9wl2ydiJEccKNKnL2ThVS6nk=";
 
     nativeBuildInputs = [
       prev.installShellFiles

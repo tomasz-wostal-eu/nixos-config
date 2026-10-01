@@ -5,16 +5,16 @@
 final: prev: {
   tea-dash = prev.buildGoModule rec {
     pname = "tea-dash";
-    version = "0.3.8";
+    version = "0.3.9";
 
     src = prev.fetchFromGitHub {
       owner = "gbarany";
       repo = "tea-dash";
       tag = "v${version}";
-      hash = "sha256-0MUzkbQzyp1TRZaHnCmIR+1MjBzmqBndaBmVTBMCPGI=";
+      hash = "sha256-g7dQ3WPL1GUzrN/uqWNT0Ud8RE8rkremYQN/5OzWBaQ=";
     };
 
-    vendorHash = "sha256-CNty+TgwujfTguhwIXurtz2ILBnGYonVjgrJOtXO644=";
+    vendorHash = "sha256-gvjy23OFXQoqNAlDgKurEgV/F60wvboPuCK9Wq6wjiU=";
 
     # internal/git tests shell out to `git init`, which is not in the sandbox
     # PATH by default — without this they fail as "executable file not found".
