@@ -482,10 +482,13 @@ in
       extras = {
         ai = {
           claudecode.enable = true;
-          copilot.enable = false;
+          # inline ghost text + blink source; minuet (below) adds Claude/OpenAI/Gemini on demand
+          copilot.enable = true;
           sidekick.enable = true;
         };
         coding = {
+          # explicit, so blink.cmp comes from nixpkgs instead of lazy.nvim's runtime git clone
+          blink.enable = true;
           mini-comment.enable = true;
           mini-snippets.enable = true;
           mini-surround.enable = true;
@@ -603,11 +606,81 @@ in
           };
         };
       };
+      # minuet-ai: Claude / OpenAI / Gemini completions, triggered by hand (<A-y>) so
+      # Copilot stays the only always-on source. Keys are resolved lazily at request
+      # time from the environment, then `pass api/<provider>`; nothing is stored here
+      # (public remote + world-readable /nix/store). Switch provider: `:Minuet change_provider`.
+      plugins.minuet = ''
+        local function key(env, entry)
+          return function()
+            local v = vim.env[env]
+            if v and v ~= "" then
+              return v
+            end
+            local out = vim.fn.system({ "pass", "show", entry })
+            if vim.v.shell_error ~= 0 then
+              return nil
+            end
+            return vim.trim(vim.split(out, "\n")[1])
+          end
+        end
+
+        return {
+          {
+            dir = "${pkgs.vimPlugins.minuet-ai-nvim}",
+            name = "minuet-ai.nvim",
+            dependencies = { "nvim-lua/plenary.nvim" },
+            event = "InsertEnter",
+            opts = {
+              provider = "claude",
+              n_completions = 2,
+              provider_options = {
+                claude = {
+                  model = "claude-haiku-4-5",
+                  api_key = key("ANTHROPIC_API_KEY", "api/anthropic"),
+                },
+                openai = {
+                  model = "gpt-4.1-mini",
+                  api_key = key("OPENAI_API_KEY", "api/openai"),
+                },
+                gemini = {
+                  model = "gemini-2.5-flash",
+                  api_key = key("GEMINI_API_KEY", "api/gemini"),
+                },
+              },
+            },
+          },
+          {
+            "saghen/blink.cmp",
+            opts = {
+              keymap = {
+                ["<A-y>"] = {
+                  function(cmp)
+                    cmp.show({ providers = { "minuet" } })
+                  end,
+                },
+              },
+              sources = {
+                providers = {
+                  minuet = {
+                    name = "minuet",
+                    module = "minuet.blink",
+                    async = true,
+                    timeout_ms = 3000,
+                    score_offset = 50,
+                  },
+                },
+              },
+            },
+          },
+        }
+      '';
       extraPackages = with pkgs; [
         nixd # Nix LSP
         alejandra # Nix formatter
         nil
         nixd
+        copilot-language-server # copilot.lua + sidekick NES
         vimPlugins.plenary-nvim
         vimPlugins.obsidian-nvim
         vimPlugins.nvim-treesitter.withAllGrammars
