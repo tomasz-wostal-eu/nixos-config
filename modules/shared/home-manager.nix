@@ -621,16 +621,22 @@ in
       # (public remote + world-readable /nix/store). Switch provider: `:Minuet change_provider`.
       plugins.minuet = ''
         local function key(env, entry)
+          -- `pass show` blocks the UI thread, so a successful lookup is kept for the session.
+          local cached
           return function()
             local v = vim.env[env]
             if v and v ~= "" then
               return v
             end
+            if cached then
+              return cached
+            end
             local out = vim.fn.system({ "pass", "show", entry })
             if vim.v.shell_error ~= 0 then
               return nil
             end
-            return vim.trim(vim.split(out, "\n")[1])
+            cached = vim.trim(vim.split(out, "\n")[1])
+            return cached
           end
         end
 

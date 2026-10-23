@@ -103,6 +103,81 @@ let
   # #24273a landing on the neutral grey color235 — which left a seam between the
   # neomutt pane and everything else. neomutt now uses the ANSI 0-15 slots and
   # `default`, which the terminal already maps to exact Catppuccin values.)
+
+  # Signs an agent comment on a PR; used by the helper scripts below too.
+  agentPrComment =
+    pkgs.writeShellApplication {
+      name = "agent-pr-comment";
+      runtimeInputs = [
+        pkgs.git
+        pkgs.tea
+        pkgs.gh
+        pkgs.gnugrep
+        pkgs.gawk
+      ];
+      text = ''
+        if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+          echo "usage: agent-pr-comment <agent> [pr-number]  (comment body on stdin)" >&2
+          exit 2
+        fi
+        agent=$1
+        body=$(cat)
+
+        if [ -z "$body" ]; then
+          echo "empty comment body" >&2
+          exit 1
+        fi
+        if printf '%s' "$body" | grep -q -P '[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]'; then
+          echo "PR comments must be in English (Polish letters found)" >&2
+          exit 1
+        fi
+
+        branch=$(git rev-parse --abbrev-ref HEAD)
+        sha=$(git rev-parse --short HEAD)
+        remote=$(git remote get-url origin)
+
+        # Review worktrees are named review/pr-<n>, so the PR number is in the branch.
+        pr=''${2:-}
+        if [ -z "$pr" ] && [[ $branch =~ ^review/pr-([0-9]+)$ ]]; then
+          pr=''${BASH_REMATCH[1]}
+        fi
+
+        # The comment is signed with the PR's head branch, not the checkout it was
+        # posted from (a review worktree, or a local main that was pushed elsewhere).
+        label=$branch
+        case $remote in
+          *codeberg.org*)
+            prs=$(tea pulls ls --state open --limit 200 -f index,head -o simple)
+            if [ -z "$pr" ]; then
+              pr=$(awk -v b="$branch" '$2 == b { print $1; exit }' <<< "$prs")
+            fi
+            [ -n "$pr" ] || { echo "no open Codeberg PR for branch $branch" >&2; exit 1; }
+            head=$(awk -v n="$pr" '$1 == n { print $2; exit }' <<< "$prs")
+            [ -z "$head" ] || label=$head
+            ;;
+          *github.com*)
+            if [ -z "$pr" ]; then
+              pr=$(gh pr view --json number -q .number)
+            fi
+            head=$(gh pr view "$pr" --json headRefName -q .headRefName 2> /dev/null || true)
+            [ -z "$head" ] || label=$head
+            ;;
+          *)
+            echo "unsupported remote: $remote" >&2
+            exit 1
+            ;;
+        esac
+
+        # The backticks are literal Markdown, not command substitution.
+        # shellcheck disable=SC2016
+        comment=$(printf '**%s** · `%s@%s`\n\n%s\n' "$agent" "$label" "$sha" "$body")
+
+        case $remote in
+          *codeberg.org*) tea comment "$pr" "$comment" ;;
+          *) gh pr comment "$pr" --body "$comment" ;;
+        esac
+      '';
+    };
 in
 {
   ".local/bin/pinentry-auto".source = pkgs.writeShellScript "pinentry-auto" ''
@@ -1378,63 +1453,7 @@ in
   # comment is signed with the agent, branch and short SHA so the history says who
   # said what about which commit. Comments are English by rule, so the body is
   # rejected when it contains Polish letters.
-  ".local/bin/agent-pr-comment".source = pkgs.lib.getExe (
-    pkgs.writeShellApplication {
-      name = "agent-pr-comment";
-      runtimeInputs = [
-        pkgs.git
-        pkgs.tea
-        pkgs.gh
-        pkgs.gnugrep
-        pkgs.gawk
-      ];
-      text = ''
-        if [ $# -lt 1 ] || [ $# -gt 2 ]; then
-          echo "usage: agent-pr-comment <agent> [pr-number]  (comment body on stdin)" >&2
-          exit 2
-        fi
-        agent=$1
-        body=$(cat)
-
-        if [ -z "$body" ]; then
-          echo "empty comment body" >&2
-          exit 1
-        fi
-        if printf '%s' "$body" | grep -q -P '[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]'; then
-          echo "PR comments must be in English (Polish letters found)" >&2
-          exit 1
-        fi
-
-        branch=$(git rev-parse --abbrev-ref HEAD)
-        sha=$(git rev-parse --short HEAD)
-        remote=$(git remote get-url origin)
-        # The backticks are literal Markdown, not command substitution.
-        # shellcheck disable=SC2016
-        comment=$(printf '**%s** · `%s@%s`\n\n%s\n' "$agent" "$branch" "$sha" "$body")
-
-        # Review worktrees are named review/pr-<n>, so the PR number is in the branch.
-        if [ -z "''${2:-}" ] && [[ $branch =~ ^review/pr-([0-9]+)$ ]]; then
-          set -- "$1" "''${BASH_REMATCH[1]}"
-        fi
-
-        case $remote in
-          *codeberg.org*)
-            pr=''${2:-$(tea pulls ls --state open --limit 200 -f index,head -o simple | awk -v b="$branch" '$2 == b { print $1; exit }')}
-            [ -n "$pr" ] || { echo "no open Codeberg PR for branch $branch" >&2; exit 1; }
-            tea comment "$pr" "$comment"
-            ;;
-          *github.com*)
-            pr=''${2:-$(gh pr view --json number -q .number)}
-            gh pr comment "$pr" --body "$comment"
-            ;;
-          *)
-            echo "unsupported remote: $remote" >&2
-            exit 1
-            ;;
-        esac
-      '';
-    }
-  );
+  ".local/bin/agent-pr-comment".source = pkgs.lib.getExe agentPrComment;
 
   # Starts a task from a Jira key: `wja DW-123 short title words`. Always branches from a
   # freshly fetched default branch (the step agents used to forget), names the branch
@@ -1490,6 +1509,7 @@ in
       runtimeInputs = [
         pkgs.git
         pkgs.coreutils
+        agentPrComment
       ];
       text = ''
         yes=0
