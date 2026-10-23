@@ -1412,6 +1412,11 @@ in
         # shellcheck disable=SC2016
         comment=$(printf '**%s** · `%s@%s`\n\n%s\n' "$agent" "$branch" "$sha" "$body")
 
+        # Review worktrees are named review/pr-<n>, so the PR number is in the branch.
+        if [ -z "''${2:-}" ] && [[ $branch =~ ^review/pr-([0-9]+)$ ]]; then
+          set -- "$1" "''${BASH_REMATCH[1]}"
+        fi
+
         case $remote in
           *codeberg.org*)
             pr=''${2:-$(tea pulls ls --state open -f index,head -o simple | awk -v b="$branch" '$2 == b { print $1; exit }')}
@@ -1427,6 +1432,99 @@ in
             exit 1
             ;;
         esac
+      '';
+    }
+  );
+
+  # Starts a task from a Jira key: `wja DW-123 short title words`. Always branches from a
+  # freshly fetched default branch (the step agents used to forget), names the branch
+  # type/KEY-slug and hands the agent a prompt that carries the key. `-t fix|chore|...`
+  # sets the branch type, feat by default.
+  ".local/bin/wja".source = pkgs.lib.getExe (
+    pkgs.writeShellApplication {
+      name = "wja";
+      runtimeInputs = [
+        pkgs.git
+        pkgs.gnused
+        pkgs.coreutils
+      ];
+      text = ''
+        type=feat
+        while getopts "t:" opt; do
+          case $opt in
+            t) type=$OPTARG ;;
+            *) echo "usage: wja [-t type] KEY [title words...]" >&2; exit 2 ;;
+          esac
+        done
+        shift $((OPTIND - 1))
+
+        key=''${1:-}
+        if ! [[ $key =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]; then
+          echo "usage: wja [-t type] KEY [title words...]  (KEY looks like DW-123)" >&2
+          exit 2
+        fi
+        shift
+        title="$*"
+
+        slug=$(printf '%s' "$title" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')
+        branch="$type/$key''${slug:+-$slug}"
+
+        git rev-parse --git-dir > /dev/null
+        git fetch --prune origin
+        base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null || echo origin/main)
+
+        prompt="Task $key''${title:+: $title}. Read the task first (Jira $key, via the Atlassian MCP when it is available) and follow this repository's CLAUDE.md workflow. Commit footer: Refs: $key. PR titles, descriptions and comments are English."
+
+        exec workmux add "$branch" --base "$base" -p "$prompt"
+      '';
+    }
+  );
+
+  # Collects what the reviewers wrote in a review worktree (.workmux/review-<agent>.md)
+  # and posts each file to the PR as a comment signed with the agent, after a preview.
+  # Posting is deliberately a step the user takes: it is visible on the forge.
+  ".local/bin/agent-review-post".source = pkgs.lib.getExe (
+    pkgs.writeShellApplication {
+      name = "agent-review-post";
+      runtimeInputs = [
+        pkgs.git
+        pkgs.coreutils
+      ];
+      text = ''
+        yes=0
+        if [ "''${1:-}" = "-y" ]; then
+          yes=1
+          shift
+        fi
+        dir=''${1:-.}
+        cd "$dir"
+
+        branch=$(git rev-parse --abbrev-ref HEAD)
+        if ! [[ $branch =~ ^review/pr-[0-9]+$ ]]; then
+          echo "not a review worktree (branch is $branch, expected review/pr-<n>)" >&2
+          exit 1
+        fi
+
+        shopt -s nullglob
+        files=(.workmux/review-*.md)
+        if [ ''${#files[@]} -eq 0 ]; then
+          echo "no .workmux/review-*.md files here; the reviewers have not written one yet" >&2
+          exit 1
+        fi
+
+        for f in "''${files[@]}"; do
+          agent=$(basename "$f" .md)
+          agent=''${agent#review-}
+          echo "=== $agent ($f)"
+          cat "$f"
+          echo
+          if [ "$yes" -ne 1 ]; then
+            read -r -p "Post this as '$agent' to the PR? [y/N] " answer
+            [ "$answer" = "y" ] || { echo "skipped"; continue; }
+          fi
+          agent-pr-comment "$agent" < "$f"
+          mv "$f" "$f.posted"
+        done
       '';
     }
   );
