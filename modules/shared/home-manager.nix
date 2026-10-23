@@ -278,6 +278,12 @@ in
         set -s extended-keys on
         set -as terminal-features ",xterm-ghostty:extkeys"
         set -as terminal-features ",xterm-256color:extkeys"
+        # Undercurl + coloured underlines (nvim diagnostics) and strikethrough:
+        # tmux only forwards them when terminfo is told how to emit them.
+        set -as terminal-overrides ',*:Smulx=\E[4::%p1%dm'
+        set -as terminal-overrides ',*:Setulc=\E[58::2::%p1%{65536}%/%d::%p1%{256}%/%{255}%&%d::%p1%{255}%&%d%;m'
+        set -as terminal-overrides ',xterm-256color:smxx=\E[9m'
+        set -g mouse on
         set-environment -g COLORTERM truecolor
         set -g pane-active-border-style 'fg=magenta,bg=default'
         set -g pane-border-style 'fg=brightblack,bg=default'
@@ -286,6 +292,9 @@ in
         bind ^C new-window -c "$HOME"
         bind ^D detach
         bind H previous-window
+        # Reorder windows without leaving them: -d keeps focus on the moved one.
+        bind -n C-S-Left swap-window -d -t -1
+        bind -n C-S-Right swap-window -d -t +1
         bind L next-window
         bind z resize-pane -Z
         bind s split-window -v -c "#{pane_current_path}"
@@ -344,6 +353,8 @@ in
         # set -g @sessionx-filter-current 'false'
         set -g @continuum-restore 'on'
         set -g @resurrect-strategy-nvim 'session'
+        set -g @resurrect-capture-pane-contents 'on'
+        set -g @continuum-save-interval '30'
       '';
     };
 
