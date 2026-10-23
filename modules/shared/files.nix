@@ -1373,4 +1373,27 @@ in
     account default : wostal
   '';
 
+  # pi — Ollama on the LAN box. Only models.json is declarative: pi rewrites
+  # settings.json itself (default model, packages), so that stays mutable.
+  # Ollama ignores the API key; pi just needs a non-empty one to list the models.
+  ".pi/agent/models.json".text = builtins.toJSON {
+    providers.ollama = {
+      baseUrl = "http://192.168.1.37:11434/v1";
+      api = "openai-completions";
+      apiKey = "ollama";
+      # The *-32k variants live on the Ollama host (created via /api/create with
+      # parameters.num_ctx = 32768); /v1 ignores num_ctx per request, so the
+      # context has to be baked into the model. contextWindow must match it:
+      # pi assumes 128k and 16k output when unset, so it never compacts and
+      # Ollama cuts the reply with finish_reason "length". Thinking tokens count
+      # against maxTokens, hence the larger budget for the reasoning models.
+      models = [
+        { id = "qwen3.8:27b-32k"; reasoning = true; contextWindow = 32768; maxTokens = 24576; }
+        { id = "deepseek-r1:32b-32k"; reasoning = true; contextWindow = 32768; maxTokens = 24576; }
+        { id = "devstral:24b-32k"; contextWindow = 32768; maxTokens = 16384; }
+        { id = "qwen3-coder:30b-32k"; contextWindow = 32768; maxTokens = 16384; }
+      ];
+    };
+  };
+
 }
