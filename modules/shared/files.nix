@@ -1485,6 +1485,31 @@ in
           - command: <agent:codex>
             split: vertical
 
+      # Trzy modele na jednym drzewie: Claude pisze, Codex i Antigravity czytają.
+      # Antigravity (agy) ma hooki statusu od `workmux setup`, więc pojawia się
+      # w dashboardzie tak samo jak pozostałe dwa.
+      trio:
+        panes:
+          - command: <agent>
+            focus: true
+          - command: <agent:codex>
+            split: vertical
+          - command: <agent:agy>
+            split: horizontal
+
+      # Review PR bez edycji: Codex jako główny recenzent, obok Antigravity w
+      # trybie plan (nic nie zapisuje) jako tania pierwsza runda, i wolny shell.
+      # Sprawdzone na prawdziwym diffie z drift-warden: ~11 s, bez zmyślonych błędów.
+      # Repo z własnym `review` w .workmux.yaml (drift-warden, metanol) go nadpisują.
+      review:
+        panes:
+          - command: <agent:codex>
+            focus: true
+          - command: agy --mode plan
+            split: vertical
+          - split: horizontal
+            size: 25
+
       # Agent plus wolny shell pod ręczne sprawdzenia (testy, logi, git).
       solo:
         panes:
