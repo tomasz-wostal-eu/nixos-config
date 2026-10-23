@@ -312,6 +312,8 @@ in
         bind S choose-session
         bind K send-keys "clear"\; send-keys "Enter"
         bind -N "last-session (sesh) " L run-shell "sesh last"
+        bind -N "workmux dashboard" W display-popup -E -w 90% -h 90% -d "#{pane_current_path}" "workmux dashboard"
+        bind -N "workmux sidebar" B run-shell "workmux sidebar"
         bind-key "T" run-shell "sesh connect \"$(
           sesh list --icons | fzf-tmux -p 80%,70% \
             --no-sort --ansi --border-label ' sesh ' --prompt '⚡  ' \
