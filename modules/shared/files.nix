@@ -103,6 +103,81 @@ let
   # #24273a landing on the neutral grey color235 — which left a seam between the
   # neomutt pane and everything else. neomutt now uses the ANSI 0-15 slots and
   # `default`, which the terminal already maps to exact Catppuccin values.)
+
+  # Signs an agent comment on a PR; used by the helper scripts below too.
+  agentPrComment =
+    pkgs.writeShellApplication {
+      name = "agent-pr-comment";
+      runtimeInputs = [
+        pkgs.git
+        pkgs.tea
+        pkgs.gh
+        pkgs.gnugrep
+        pkgs.gawk
+      ];
+      text = ''
+        if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+          echo "usage: agent-pr-comment <agent> [pr-number]  (comment body on stdin)" >&2
+          exit 2
+        fi
+        agent=$1
+        body=$(cat)
+
+        if [ -z "$body" ]; then
+          echo "empty comment body" >&2
+          exit 1
+        fi
+        if printf '%s' "$body" | grep -q -P '[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]'; then
+          echo "PR comments must be in English (Polish letters found)" >&2
+          exit 1
+        fi
+
+        branch=$(git rev-parse --abbrev-ref HEAD)
+        sha=$(git rev-parse --short HEAD)
+        remote=$(git remote get-url origin)
+
+        # Review worktrees are named review/pr-<n>, so the PR number is in the branch.
+        pr=''${2:-}
+        if [ -z "$pr" ] && [[ $branch =~ ^review/pr-([0-9]+)$ ]]; then
+          pr=''${BASH_REMATCH[1]}
+        fi
+
+        # The comment is signed with the PR's head branch, not the checkout it was
+        # posted from (a review worktree, or a local main that was pushed elsewhere).
+        label=$branch
+        case $remote in
+          *codeberg.org*)
+            prs=$(tea pulls ls --state open --limit 200 -f index,head -o simple)
+            if [ -z "$pr" ]; then
+              pr=$(awk -v b="$branch" '$2 == b { print $1; exit }' <<< "$prs")
+            fi
+            [ -n "$pr" ] || { echo "no open Codeberg PR for branch $branch" >&2; exit 1; }
+            head=$(awk -v n="$pr" '$1 == n { print $2; exit }' <<< "$prs")
+            [ -z "$head" ] || label=$head
+            ;;
+          *github.com*)
+            if [ -z "$pr" ]; then
+              pr=$(gh pr view --json number -q .number)
+            fi
+            head=$(gh pr view "$pr" --json headRefName -q .headRefName 2> /dev/null || true)
+            [ -z "$head" ] || label=$head
+            ;;
+          *)
+            echo "unsupported remote: $remote" >&2
+            exit 1
+            ;;
+        esac
+
+        # The backticks are literal Markdown, not command substitution.
+        # shellcheck disable=SC2016
+        comment=$(printf '**%s** · `%s@%s`\n\n%s\n' "$agent" "$label" "$sha" "$body")
+
+        case $remote in
+          *codeberg.org*) tea comment "$pr" "$comment" ;;
+          *) gh pr comment "$pr" --body "$comment" ;;
+        esac
+      '';
+    };
 in
 {
   ".local/bin/pinentry-auto".source = pkgs.writeShellScript "pinentry-auto" ''
@@ -1372,5 +1447,288 @@ in
     # Matches the Gmail default sending identity of the itomm mailbox.
     account default : wostal
   '';
+
+  # Leaves a trace on the PR for the current branch: `agent-pr-comment claude <<< "..."`.
+  # The forge comes from the origin remote (Codeberg -> tea, GitHub -> gh), and the
+  # comment is signed with the agent, branch and short SHA so the history says who
+  # said what about which commit. Comments are English by rule, so the body is
+  # rejected when it contains Polish letters.
+  ".local/bin/agent-pr-comment".source = pkgs.lib.getExe agentPrComment;
+
+  # Starts a task from a Jira key: `wja DW-123 short title words`. Always branches from a
+  # freshly fetched default branch (the step agents used to forget), names the branch
+  # type/KEY-slug and hands the agent a prompt that carries the key. `-t fix|chore|...`
+  # sets the branch type, feat by default.
+  ".local/bin/wja".source = pkgs.lib.getExe (
+    pkgs.writeShellApplication {
+      name = "wja";
+      runtimeInputs = [
+        pkgs.git
+        pkgs.gnused
+        pkgs.coreutils
+      ];
+      text = ''
+        type=feat
+        while getopts "t:" opt; do
+          case $opt in
+            t) type=$OPTARG ;;
+            *) echo "usage: wja [-t type] KEY [title words...]" >&2; exit 2 ;;
+          esac
+        done
+        shift $((OPTIND - 1))
+
+        key=''${1:-}
+        if ! [[ $key =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]; then
+          echo "usage: wja [-t type] KEY [title words...]  (KEY looks like DW-123)" >&2
+          exit 2
+        fi
+        shift
+        title="$*"
+
+        # LC_ALL=C: GNU tr works on bytes and mangles UTF-8 letters otherwise.
+        slug=$(printf '%s' "$title" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | LC_ALL=C sed -E 's/-+$//')
+        branch="$type/$key''${slug:+-$slug}"
+
+        git rev-parse --git-dir > /dev/null
+        git fetch --prune origin
+        base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null || echo origin/main)
+
+        prompt="Task $key''${title:+: $title}. Read the task first (Jira $key, via the Atlassian MCP when it is available) and follow this repository's CLAUDE.md workflow. Commit footer: Refs: $key. PR titles, descriptions and comments are English."
+
+        exec workmux add "$branch" --base "$base" -p "$prompt"
+      '';
+    }
+  );
+
+  # Collects what the reviewers wrote in a review worktree (.workmux/review-<agent>.md)
+  # and posts each file to the PR as a comment signed with the agent, after a preview.
+  # Posting is deliberately a step the user takes: it is visible on the forge.
+  ".local/bin/agent-review-post".source = pkgs.lib.getExe (
+    pkgs.writeShellApplication {
+      name = "agent-review-post";
+      runtimeInputs = [
+        pkgs.git
+        pkgs.coreutils
+        agentPrComment
+      ];
+      text = ''
+        yes=0
+        if [ "''${1:-}" = "-y" ]; then
+          yes=1
+          shift
+        fi
+        dir=''${1:-.}
+        cd "$dir"
+        cd "$(git rev-parse --show-toplevel)"
+
+        branch=$(git rev-parse --abbrev-ref HEAD)
+        if ! [[ $branch =~ ^review/pr-[0-9]+$ ]]; then
+          echo "not a review worktree (branch is $branch, expected review/pr-<n>)" >&2
+          exit 1
+        fi
+
+        shopt -s nullglob
+        files=(.workmux/review-*.md)
+        if [ ''${#files[@]} -eq 0 ]; then
+          echo "no .workmux/review-*.md files here; the reviewers have not written one yet" >&2
+          exit 1
+        fi
+
+        for f in "''${files[@]}"; do
+          agent=$(basename "$f" .md)
+          agent=''${agent#review-}
+          echo "=== $agent ($f)"
+          cat "$f"
+          echo
+          if [ "$yes" -ne 1 ]; then
+            read -r -p "Post this as '$agent' to the PR? [y/N] " answer
+            [ "$answer" = "y" ] || { echo "skipped"; continue; }
+          fi
+          # One failed post must not stop the remaining reviews from going out.
+          if agent-pr-comment "$agent" < "$f"; then
+            mv "$f" "$f.posted"
+          else
+            echo "posting $agent failed; $f kept for a retry" >&2
+          fi
+        done
+      '';
+    }
+  );
+
+  # workmux — shared settings. The binary is installed by hand with
+  # `nix profile install github:raine/workmux` (no package or overlay here, so a
+  # fresh machine needs that one command), only the config is declarative. Per-repo overrides
+  # stay in <repo>/.workmux.yaml.
+  ".config/workmux/config.yaml".text = ''
+    # workmux — global configuration.
+    # Per-repo overrides: <repo>/.workmux.yaml (pattern: content-ops).
+
+    nerdfont: true
+
+    #-------------------------------------------------------------------------------
+    # Paths and naming
+    #-------------------------------------------------------------------------------
+
+    # One worktree location for every repo. Without this, drift-warden scattered 28
+    # worktrees across ~/.worktrees/, ~/dev/worktrees/ and the repo directory itself —
+    # every change of convention left sediment, because the default sibling directory
+    # applied. {project} keeps repositories apart.
+    worktree_dir: ~/dev/worktrees/{project}
+
+    # Branches are named fix/..., feat/..., docs/... — basename gives flat directories
+    # and readable session names instead of nesting. Same as content-ops.
+    worktree_naming: basename
+
+    # 30 repositories, and agents are addressed as project:handle. The tmux session
+    # name has to say which repo it belongs to. content-ops overrides this with "co-".
+    window_prefix: "{project}-"
+
+    #-------------------------------------------------------------------------------
+    # Git
+    #-------------------------------------------------------------------------------
+
+    base_branch: auto
+
+    # 28 unmerged branches in drift-warden alone. The confirmation before removing an
+    # unmerged branch stays on deliberately, not by accident.
+    confirm_unmerged_removal: true
+
+    #-------------------------------------------------------------------------------
+    # Tmux
+    #-------------------------------------------------------------------------------
+
+    # One session per worktree. Required by `windows:` blocks and consistent with content-ops.
+    mode: session
+
+    #-------------------------------------------------------------------------------
+    # Agents
+    #-------------------------------------------------------------------------------
+
+    agent: claude
+
+    # The default timeout is too short: this repo's build-switch alone took 50 minutes,
+    # and an agent working longer than an hour is not abandoned.
+    stale_after: 2h
+
+    status_icons:
+      working: "🤖"
+      waiting: "💬"
+      done: "✅"
+
+    #-------------------------------------------------------------------------------
+    # Hooks
+    #-------------------------------------------------------------------------------
+
+    # Fresh fetch on every new worktree — the "stale clone" class of bug stops being
+    # something to remember. `|| true` is required: post_create blocks window creation,
+    # so a failed fetch would break `workmux add`. speedway has a remote pointing at a
+    # repo that does not exist on Codeberg yet, and the fetch there returns
+    # "Cannot find repository" — a real case, not a theoretical one.
+    post_create:
+      - git fetch --prune origin || true
+
+    #-------------------------------------------------------------------------------
+    # Dashboard
+    #-------------------------------------------------------------------------------
+
+    dashboard:
+      sort_mode: priority
+      preview_size: 60
+      commit: "Commit staged changes with a descriptive message"
+      merge: "!workmux merge"
+
+    #-------------------------------------------------------------------------------
+    # Sidebar
+    #-------------------------------------------------------------------------------
+
+    sidebar:
+      position: left
+      layout: tiles
+      # Grouping by project only pays off with many repos — and there are 30.
+      group_by: project
+      collapse_stale: true
+
+    #-------------------------------------------------------------------------------
+    # Named pane layouts (selected with `workmux add -l <name>`)
+    #-------------------------------------------------------------------------------
+
+    # Status hooks are installed for all three CLIs (~/.claude/settings.json,
+    # ~/.codex/hooks.json, ~/.gemini/config/hooks.json), so each reports 🤖/💬/✅ to the
+    # dashboard and sidebar.
+    #
+    # Note: `-l` replaces `panes` and does NOT combine with `--agent`. They are separate modes:
+    #   workmux add X -l duel          -> one worktree, two models on shared files
+    #   workmux add X -a claude,codex  -> two worktrees, a separate branch per model
+    layouts:
+      # One worktree, Claude and Codex side by side. They share the same working tree,
+      # so this is a "one writes, the other reads/reviews" layout, not for parallel editing.
+      duel:
+        panes:
+          - command: <agent>
+            focus: true
+          - command: <agent:codex>
+            split: vertical
+
+      # The reviewers do not ask for approval on every command: Codex runs with
+      # `-a never` inside the `workspace-write` sandbox (writes only in the worktree, no
+      # network), and agy with `--dangerously-skip-permissions`. Claude has its own auto mode.
+      # Three models on one tree: Claude writes, Codex and Antigravity read.
+      # Antigravity (agy) has status hooks from `workmux setup`, so it shows up in the
+      # dashboard like the other two.
+      trio:
+        panes:
+          - command: <agent>
+            focus: true
+          - command: codex -a never -s workspace-write
+            split: vertical
+          - command: agy --dangerously-skip-permissions
+            split: horizontal
+
+      # PR review: Codex as the main reviewer, Antigravity as a second reader, and a free
+      # shell. Both write their review to .workmux/review-<agent>.md (instructions live in
+      # ~/.codex/AGENTS.md and ~/.gemini/GEMINI.md) and `agent-review-post` posts it.
+      # agy no longer runs in plan mode, which cannot write that file; nothing technical
+      # stops it from editing the review worktree, only the prompt says not to.
+      # Repos with their own `review` in .workmux.yaml (drift-warden, metanol) override it.
+      review:
+        panes:
+          - command: codex -a never -s workspace-write
+            focus: true
+          - command: agy --dangerously-skip-permissions
+            split: vertical
+          - split: horizontal
+            size: 25
+
+      # Agent plus a free shell for manual checks (tests, logs, git).
+      solo:
+        panes:
+          - command: <agent>
+            focus: true
+          - split: horizontal
+            size: 20
+  '';
+
+  # pi — Ollama on the LAN box. Only models.json is declarative: pi rewrites
+  # settings.json itself (default model, packages), so that stays mutable.
+  # Ollama ignores the API key; pi just needs a non-empty one to list the models.
+  ".pi/agent/models.json".text = builtins.toJSON {
+    providers.ollama = {
+      baseUrl = "http://192.168.1.37:11434/v1";
+      api = "openai-completions";
+      apiKey = "ollama";
+      # The *-32k variants live on the Ollama host (created via /api/create with
+      # parameters.num_ctx = 32768); /v1 ignores num_ctx per request, so the
+      # context has to be baked into the model. contextWindow must match it:
+      # pi assumes 128k and 16k output when unset, so it never compacts and
+      # Ollama cuts the reply with finish_reason "length". Thinking tokens count
+      # against maxTokens, hence the larger budget for the reasoning models.
+      models = [
+        { id = "qwen3.8:27b-32k"; reasoning = true; contextWindow = 32768; maxTokens = 24576; }
+        { id = "deepseek-r1:32b-32k"; reasoning = true; contextWindow = 32768; maxTokens = 24576; }
+        { id = "devstral:24b-32k"; contextWindow = 32768; maxTokens = 16384; }
+        { id = "qwen3-coder:30b-32k"; contextWindow = 32768; maxTokens = 16384; }
+      ];
+    };
+  };
 
 }

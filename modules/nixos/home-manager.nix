@@ -6,7 +6,10 @@ let
   shared-files = import ../shared/files.nix { inherit config pkgs; };
 in
 {
-  imports = [ lazyvim.homeManagerModules.default ];
+  imports = [
+    lazyvim.homeManagerModules.default
+    ../shared/completions.nix
+  ];
 
   home = {
     enableNixpkgsReleaseCheck = false;

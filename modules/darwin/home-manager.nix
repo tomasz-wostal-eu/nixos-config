@@ -84,7 +84,10 @@ in
           shellAliases = shared.shellAliases;
           sessionPath = [ "$HOME/.local/bin" ];
         };
-        imports = [ lazyvim.homeManagerModules.default ];
+        imports = [
+          lazyvim.homeManagerModules.default
+          ../shared/completions.nix
+        ];
         programs = shared.programs;
 
         # Pull Google Calendar into ~/.local/share/calendars every 15 min so

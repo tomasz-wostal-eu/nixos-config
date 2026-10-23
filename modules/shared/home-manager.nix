@@ -108,12 +108,8 @@ in
         # wt shell integration (worktree manager)
         command -v wt &>/dev/null && source <(wt shellenv)
 
-        # ZSH completions
-        command -v kubectl &>/dev/null && source <(kubectl completion zsh)
-        command -v argocd  &>/dev/null && source <(argocd  completion zsh)
-        command -v argo    &>/dev/null && source <(argo    completion zsh)
-        command -v kargo   &>/dev/null && source <(kargo   completion zsh)
-        command -v sesh    &>/dev/null && source <(sesh    completion zsh)
+        # Completions come from site-functions (packages + modules/shared/completions.nix)
+        # and carapace, not from `source <(x completion zsh)` at every startup.
       '';
     };
 
@@ -282,6 +278,12 @@ in
         set -s extended-keys on
         set -as terminal-features ",xterm-ghostty:extkeys"
         set -as terminal-features ",xterm-256color:extkeys"
+        # Undercurl + coloured underlines (nvim diagnostics) and strikethrough:
+        # tmux only forwards them when terminfo is told how to emit them.
+        set -as terminal-overrides ',*:Smulx=\E[4::%p1%dm'
+        set -as terminal-overrides ',*:Setulc=\E[58::2::%p1%{65536}%/%d::%p1%{256}%/%{255}%&%d::%p1%{255}%&%d%;m'
+        set -as terminal-overrides ',xterm-256color:smxx=\E[9m'
+        set -g mouse on
         set-environment -g COLORTERM truecolor
         set -g pane-active-border-style 'fg=magenta,bg=default'
         set -g pane-border-style 'fg=brightblack,bg=default'
@@ -290,6 +292,9 @@ in
         bind ^C new-window -c "$HOME"
         bind ^D detach
         bind H previous-window
+        # Reorder windows without leaving them: -d keeps focus on the moved one.
+        bind -n C-S-Left swap-window -d -t -1
+        bind -n C-S-Right swap-window -d -t +1
         bind L next-window
         bind z resize-pane -Z
         bind s split-window -v -c "#{pane_current_path}"
@@ -307,6 +312,8 @@ in
         bind S choose-session
         bind K send-keys "clear"\; send-keys "Enter"
         bind -N "last-session (sesh) " L run-shell "sesh last"
+        bind -N "workmux dashboard" W display-popup -E -w 90% -h 90% -d "#{pane_current_path}" "workmux dashboard"
+        bind -N "workmux sidebar" B run-shell "workmux sidebar"
         bind-key "T" run-shell "sesh connect \"$(
           sesh list --icons | fzf-tmux -p 80%,70% \
             --no-sort --ansi --border-label ' sesh ' --prompt '⚡  ' \
@@ -348,6 +355,8 @@ in
         # set -g @sessionx-filter-current 'false'
         set -g @continuum-restore 'on'
         set -g @resurrect-strategy-nvim 'session'
+        set -g @resurrect-capture-pane-contents 'on'
+        set -g @continuum-save-interval '30'
       '';
     };
 
@@ -482,10 +491,13 @@ in
       extras = {
         ai = {
           claudecode.enable = true;
-          copilot.enable = false;
+          # inline ghost text + blink source; minuet (below) adds Claude/OpenAI/Gemini on demand
+          copilot.enable = true;
           sidekick.enable = true;
         };
         coding = {
+          # explicit, so blink.cmp comes from nixpkgs instead of lazy.nvim's runtime git clone
+          blink.enable = true;
           mini-comment.enable = true;
           mini-snippets.enable = true;
           mini-surround.enable = true;
@@ -603,11 +615,87 @@ in
           };
         };
       };
+      # minuet-ai: Claude / OpenAI / Gemini completions, triggered by hand (<A-y>) so
+      # Copilot stays the only always-on source. Keys are resolved lazily at request
+      # time from the environment, then `pass api/<provider>`; nothing is stored here
+      # (public remote + world-readable /nix/store). Switch provider: `:Minuet change_provider`.
+      plugins.minuet = ''
+        local function key(env, entry)
+          -- `pass show` blocks the UI thread, so a successful lookup is kept for the session.
+          local cached
+          return function()
+            local v = vim.env[env]
+            if v and v ~= "" then
+              return v
+            end
+            if cached then
+              return cached
+            end
+            local out = vim.fn.system({ "pass", "show", entry })
+            if vim.v.shell_error ~= 0 then
+              return nil
+            end
+            cached = vim.trim(vim.split(out, "\n")[1])
+            return cached
+          end
+        end
+
+        return {
+          {
+            dir = "${pkgs.vimPlugins.minuet-ai-nvim}",
+            name = "minuet-ai.nvim",
+            dependencies = { "nvim-lua/plenary.nvim" },
+            event = "InsertEnter",
+            opts = {
+              provider = "claude",
+              n_completions = 2,
+              provider_options = {
+                claude = {
+                  model = "claude-haiku-4-5",
+                  api_key = key("ANTHROPIC_API_KEY", "api/anthropic"),
+                },
+                openai = {
+                  model = "gpt-4.1-mini",
+                  api_key = key("OPENAI_API_KEY", "api/openai"),
+                },
+                gemini = {
+                  model = "gemini-2.5-flash",
+                  api_key = key("GEMINI_API_KEY", "api/gemini"),
+                },
+              },
+            },
+          },
+          {
+            "saghen/blink.cmp",
+            opts = {
+              keymap = {
+                ["<A-y>"] = {
+                  function(cmp)
+                    cmp.show({ providers = { "minuet" } })
+                  end,
+                },
+              },
+              sources = {
+                providers = {
+                  minuet = {
+                    name = "minuet",
+                    module = "minuet.blink",
+                    async = true,
+                    timeout_ms = 3000,
+                    score_offset = 50,
+                  },
+                },
+              },
+            },
+          },
+        }
+      '';
       extraPackages = with pkgs; [
         nixd # Nix LSP
         alejandra # Nix formatter
         nil
         nixd
+        copilot-language-server # copilot.lua + sidekick NES
         vimPlugins.plenary-nvim
         vimPlugins.obsidian-nvim
         vimPlugins.nvim-treesitter.withAllGrammars

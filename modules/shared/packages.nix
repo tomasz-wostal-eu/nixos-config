@@ -91,6 +91,7 @@ with pkgs;
   kubectl-validate
   kubectl-view-allocations
   kubectl-view-secret
+  kubectx # kubectx + kubens, behind the kc/kns aliases
   kubelogin
   kubelogin-oidc
   kubeseal
@@ -102,6 +103,7 @@ with pkgs;
   lieer # Gmail <-> notmuch sync over the Gmail API (gmi)
   lolcat
   lsof
+  marimo # reactive Python notebooks
   mc # midnight-commander
   meslo-lgs-nf
   mongosh
@@ -175,10 +177,6 @@ with pkgs;
   watch
   wget
   whisper-cpp
-  # https://github.com/raine/workmux — one git worktree per task, each in its
-  # own tmux window; overlays/40-workmux.nix. Overlaps git-wt: wt manages the
-  # worktrees, workmux also drives the tmux side and per-task agent commands.
-  workmux
   # wireshark # GUI conflicts with termshark/tshark CLI, use cask on macOS
   xh
   yamllint
