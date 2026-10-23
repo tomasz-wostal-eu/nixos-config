@@ -1373,6 +1373,127 @@ in
     account default : wostal
   '';
 
+  # workmux — shared settings. The binary comes from `nix profile` (see
+  # workmux-nix-profile), only the config is declarative. Per-repo overrides
+  # stay in <repo>/.workmux.yaml.
+  ".config/workmux/config.yaml".text = ''
+    # workmux — konfiguracja globalna.
+    # Nadpisania projektowe: <repo>/.workmux.yaml (wzorzec: content-ops).
+
+    nerdfont: true
+
+    #-------------------------------------------------------------------------------
+    # Ścieżki i nazewnictwo
+    #-------------------------------------------------------------------------------
+
+    # Jedna lokalizacja worktree dla wszystkich repo. Bez tego ustawienia drift-warden
+    # rozsiał 28 worktree po ~/.worktrees/, ~/dev/worktrees/ i samym katalogu repo —
+    # każda zmiana konwencji zostawiała osad, bo obowiązywał domyślny katalog
+    # siostrzany. {project} izoluje repozytoria od siebie.
+    worktree_dir: ~/dev/worktrees/{project}
+
+    # Gałęzie nazywasz fix/..., feat/..., docs/... — basename daje płaskie katalogi
+    # i czytelne nazwy sesji zamiast zagnieżdżeń. Tak samo jak w content-ops.
+    worktree_naming: basename
+
+    # 30 repozytoriów, a agentów adresuje się składnią projekt:handle. Nazwa sesji
+    # tmux musi mówić z którego repo pochodzi. content-ops nadpisuje to na "co-".
+    window_prefix: "{project}-"
+
+    #-------------------------------------------------------------------------------
+    # Git
+    #-------------------------------------------------------------------------------
+
+    base_branch: auto
+
+    # 28 nieporzuconych gałęzi w samym drift-warden. Potwierdzenie przed usunięciem
+    # niezmergowanej gałęzi zostaje włączone świadomie, nie przez przypadek.
+    confirm_unmerged_removal: true
+
+    #-------------------------------------------------------------------------------
+    # Tmux
+    #-------------------------------------------------------------------------------
+
+    # Sesja per worktree. Wymagane przez bloki `windows:` i zgodne z content-ops.
+    mode: session
+
+    #-------------------------------------------------------------------------------
+    # Agenci
+    #-------------------------------------------------------------------------------
+
+    agent: claude
+
+    # Domyślna godzina to za mało: sam build-switch tego repo zajął 50 minut, a agent
+    # pracujący dłużej niż godzinę nie jest porzucony.
+    stale_after: 2h
+
+    status_icons:
+      working: "🤖"
+      waiting: "💬"
+      done: "✅"
+
+    #-------------------------------------------------------------------------------
+    # Hooki
+    #-------------------------------------------------------------------------------
+
+    # Świeży fetch na każdym nowym worktree — klasa błędu "stary klon" przestaje być
+    # czymś do zapamiętania. `|| true` jest konieczne: post_create blokuje utworzenie
+    # okna, więc nieudany fetch wywaliłby `workmux add`. speedway ma remote wskazujący
+    # na repo, którego jeszcze nie ma na Codebergu, i fetch tam zwraca
+    # "Cannot find repository" — to realny przypadek, nie teoretyczny.
+    post_create:
+      - git fetch --prune origin || true
+
+    #-------------------------------------------------------------------------------
+    # Dashboard
+    #-------------------------------------------------------------------------------
+
+    dashboard:
+      sort_mode: priority
+      preview_size: 60
+      commit: "Commit staged changes with a descriptive message"
+      merge: "!workmux merge"
+
+    #-------------------------------------------------------------------------------
+    # Sidebar
+    #-------------------------------------------------------------------------------
+
+    sidebar:
+      position: left
+      layout: tiles
+      # Grupowanie po projekcie ma sens dopiero przy wielu repo — a masz 30.
+      group_by: project
+      collapse_stale: true
+
+    #-------------------------------------------------------------------------------
+    # Nazwane układy paneli (wybierane przez `workmux add -l <nazwa>`)
+    #-------------------------------------------------------------------------------
+
+    # Hooki statusu masz zainstalowane dla obu CLI (~/.claude/settings.json oraz
+    # ~/.codex/hooks.json), więc oba raportują 🤖/💬/✅ do dashboardu i sidebara.
+    #
+    # Uwaga: `-l` zastępuje `panes` i NIE łączy się z `--agent`. To rozłączne tryby:
+    #   workmux add X -l duel          -> jeden worktree, dwa modele na wspólnych plikach
+    #   workmux add X -a claude,codex  -> dwa worktree, osobna gałąź dla każdego modelu
+    layouts:
+      # Jeden worktree, Claude i Codex obok siebie. Dzielą to samo drzewo roboczy,
+      # więc to układ "jeden pisze, drugi czyta/recenzuje", nie do równoległej edycji.
+      duel:
+        panes:
+          - command: <agent>
+            focus: true
+          - command: <agent:codex>
+            split: vertical
+
+      # Agent plus wolny shell pod ręczne sprawdzenia (testy, logi, git).
+      solo:
+        panes:
+          - command: <agent>
+            focus: true
+          - split: horizontal
+            size: 20
+  '';
+
   # pi — Ollama on the LAN box. Only models.json is declarative: pi rewrites
   # settings.json itself (default model, packages), so that stays mutable.
   # Ollama ignores the API key; pi just needs a non-empty one to list the models.
