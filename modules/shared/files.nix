@@ -1419,7 +1419,7 @@ in
 
         case $remote in
           *codeberg.org*)
-            pr=''${2:-$(tea pulls ls --state open -f index,head -o simple | awk -v b="$branch" '$2 == b { print $1; exit }')}
+            pr=''${2:-$(tea pulls ls --state open --limit 200 -f index,head -o simple | awk -v b="$branch" '$2 == b { print $1; exit }')}
             [ -n "$pr" ] || { echo "no open Codeberg PR for branch $branch" >&2; exit 1; }
             tea comment "$pr" "$comment"
             ;;
@@ -1466,7 +1466,8 @@ in
         shift
         title="$*"
 
-        slug=$(printf '%s' "$title" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')
+        # LC_ALL=C: GNU tr works on bytes and mangles UTF-8 letters otherwise.
+        slug=$(printf '%s' "$title" | LC_ALL=C tr '[:upper:]' '[:lower:]' | LC_ALL=C sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | LC_ALL=C sed -E 's/-+$//')
         branch="$type/$key''${slug:+-$slug}"
 
         git rev-parse --git-dir > /dev/null
@@ -1498,6 +1499,7 @@ in
         fi
         dir=''${1:-.}
         cd "$dir"
+        cd "$(git rev-parse --show-toplevel)"
 
         branch=$(git rev-parse --abbrev-ref HEAD)
         if ! [[ $branch =~ ^review/pr-[0-9]+$ ]]; then
@@ -1522,15 +1524,20 @@ in
             read -r -p "Post this as '$agent' to the PR? [y/N] " answer
             [ "$answer" = "y" ] || { echo "skipped"; continue; }
           fi
-          agent-pr-comment "$agent" < "$f"
-          mv "$f" "$f.posted"
+          # One failed post must not stop the remaining reviews from going out.
+          if agent-pr-comment "$agent" < "$f"; then
+            mv "$f" "$f.posted"
+          else
+            echo "posting $agent failed; $f kept for a retry" >&2
+          fi
         done
       '';
     }
   );
 
-  # workmux — shared settings. The binary comes from `nix profile` (see
-  # workmux-nix-profile), only the config is declarative. Per-repo overrides
+  # workmux — shared settings. The binary is installed by hand with
+  # `nix profile install github:raine/workmux` (no package or overlay here, so a
+  # fresh machine needs that one command), only the config is declarative. Per-repo overrides
   # stay in <repo>/.workmux.yaml.
   ".config/workmux/config.yaml".text = ''
     # workmux — global configuration.
