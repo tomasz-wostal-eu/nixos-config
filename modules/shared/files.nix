@@ -1485,6 +1485,9 @@ in
           - command: <agent:codex>
             split: vertical
 
+      # Reviewerzy nie pytają o zgodę na każde polecenie: Codex ma `-a never` z
+      # piaskownicą `workspace-write` (pisze tylko w worktree, bez sieci), agy
+      # `--dangerously-skip-permissions`. Claude ma własny auto mode.
       # Trzy modele na jednym drzewie: Claude pisze, Codex i Antigravity czytają.
       # Antigravity (agy) ma hooki statusu od `workmux setup`, więc pojawia się
       # w dashboardzie tak samo jak pozostałe dwa.
@@ -1492,9 +1495,9 @@ in
         panes:
           - command: <agent>
             focus: true
-          - command: <agent:codex>
+          - command: codex -a never -s workspace-write
             split: vertical
-          - command: <agent:agy>
+          - command: agy --dangerously-skip-permissions
             split: horizontal
 
       # Review PR bez edycji: Codex jako główny recenzent, obok Antigravity w
@@ -1503,9 +1506,9 @@ in
       # Repo z własnym `review` w .workmux.yaml (drift-warden, metanol) go nadpisują.
       review:
         panes:
-          - command: <agent:codex>
+          - command: codex -a never -s workspace-write
             focus: true
-          - command: agy --mode plan
+          - command: agy --mode plan --dangerously-skip-permissions
             split: vertical
           - split: horizontal
             size: 25
