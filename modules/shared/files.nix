@@ -1373,6 +1373,64 @@ in
     account default : wostal
   '';
 
+  # Leaves a trace on the PR for the current branch: `agent-pr-comment claude <<< "..."`.
+  # The forge comes from the origin remote (Codeberg -> tea, GitHub -> gh), and the
+  # comment is signed with the agent, branch and short SHA so the history says who
+  # said what about which commit. Comments are English by rule, so the body is
+  # rejected when it contains Polish letters.
+  ".local/bin/agent-pr-comment".source = pkgs.lib.getExe (
+    pkgs.writeShellApplication {
+      name = "agent-pr-comment";
+      runtimeInputs = [
+        pkgs.git
+        pkgs.tea
+        pkgs.gh
+        pkgs.gnugrep
+        pkgs.gawk
+      ];
+      text = ''
+        if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+          echo "usage: agent-pr-comment <agent> [pr-number]  (comment body on stdin)" >&2
+          exit 2
+        fi
+        agent=$1
+        body=$(cat)
+
+        if [ -z "$body" ]; then
+          echo "empty comment body" >&2
+          exit 1
+        fi
+        if printf '%s' "$body" | grep -q -P '[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]'; then
+          echo "PR comments must be in English (Polish letters found)" >&2
+          exit 1
+        fi
+
+        branch=$(git rev-parse --abbrev-ref HEAD)
+        sha=$(git rev-parse --short HEAD)
+        remote=$(git remote get-url origin)
+        # The backticks are literal Markdown, not command substitution.
+        # shellcheck disable=SC2016
+        comment=$(printf '**%s** · `%s@%s`\n\n%s\n' "$agent" "$branch" "$sha" "$body")
+
+        case $remote in
+          *codeberg.org*)
+            pr=''${2:-$(tea pulls ls --state open -f index,head -o simple | awk -v b="$branch" '$2 == b { print $1; exit }')}
+            [ -n "$pr" ] || { echo "no open Codeberg PR for branch $branch" >&2; exit 1; }
+            tea comment "$pr" "$comment"
+            ;;
+          *github.com*)
+            pr=''${2:-$(gh pr view --json number -q .number)}
+            gh pr comment "$pr" --body "$comment"
+            ;;
+          *)
+            echo "unsupported remote: $remote" >&2
+            exit 1
+            ;;
+        esac
+      '';
+    }
+  );
+
   # workmux — shared settings. The binary comes from `nix profile` (see
   # workmux-nix-profile), only the config is declarative. Per-repo overrides
   # stay in <repo>/.workmux.yaml.
