@@ -1657,15 +1657,17 @@ in
           - command: agy --dangerously-skip-permissions
             split: horizontal
 
-      # PR review without edits: Codex as the main reviewer, Antigravity in plan mode
-      # (writes nothing) as a cheap first pass, and a free shell.
-      # Tried on a real drift-warden diff: ~11 s, no invented findings.
+      # PR review: Codex as the main reviewer, Antigravity as a second reader, and a free
+      # shell. Both write their review to .workmux/review-<agent>.md (instructions live in
+      # ~/.codex/AGENTS.md and ~/.gemini/GEMINI.md) and `agent-review-post` posts it.
+      # agy no longer runs in plan mode, which cannot write that file; nothing technical
+      # stops it from editing the review worktree, only the prompt says not to.
       # Repos with their own `review` in .workmux.yaml (drift-warden, metanol) override it.
       review:
         panes:
           - command: codex -a never -s workspace-write
             focus: true
-          - command: agy --mode plan --dangerously-skip-permissions
+          - command: agy --dangerously-skip-permissions
             split: vertical
           - split: horizontal
             size: 25
