@@ -91,6 +91,7 @@ with pkgs;
   kubectl-validate
   kubectl-view-allocations
   kubectl-view-secret
+  kubectx # kubectx + kubens, behind the kc/kns aliases
   kubelogin
   kubelogin-oidc
   kubeseal
@@ -102,6 +103,7 @@ with pkgs;
   lieer # Gmail <-> notmuch sync over the Gmail API (gmi)
   lolcat
   lsof
+  marimo # reactive Python notebooks
   mc # midnight-commander
   meslo-lgs-nf
   mongosh

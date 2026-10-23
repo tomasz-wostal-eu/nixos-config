@@ -108,12 +108,8 @@ in
         # wt shell integration (worktree manager)
         command -v wt &>/dev/null && source <(wt shellenv)
 
-        # ZSH completions
-        command -v kubectl &>/dev/null && source <(kubectl completion zsh)
-        command -v argocd  &>/dev/null && source <(argocd  completion zsh)
-        command -v argo    &>/dev/null && source <(argo    completion zsh)
-        command -v kargo   &>/dev/null && source <(kargo   completion zsh)
-        command -v sesh    &>/dev/null && source <(sesh    completion zsh)
+        # Completions come from site-functions (packages + modules/shared/completions.nix)
+        # and carapace, not from `source <(x completion zsh)` at every startup.
       '';
     };
 
