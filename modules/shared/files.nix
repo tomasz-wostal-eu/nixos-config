@@ -1377,27 +1377,27 @@ in
   # workmux-nix-profile), only the config is declarative. Per-repo overrides
   # stay in <repo>/.workmux.yaml.
   ".config/workmux/config.yaml".text = ''
-    # workmux — konfiguracja globalna.
-    # Nadpisania projektowe: <repo>/.workmux.yaml (wzorzec: content-ops).
+    # workmux — global configuration.
+    # Per-repo overrides: <repo>/.workmux.yaml (pattern: content-ops).
 
     nerdfont: true
 
     #-------------------------------------------------------------------------------
-    # Ścieżki i nazewnictwo
+    # Paths and naming
     #-------------------------------------------------------------------------------
 
-    # Jedna lokalizacja worktree dla wszystkich repo. Bez tego ustawienia drift-warden
-    # rozsiał 28 worktree po ~/.worktrees/, ~/dev/worktrees/ i samym katalogu repo —
-    # każda zmiana konwencji zostawiała osad, bo obowiązywał domyślny katalog
-    # siostrzany. {project} izoluje repozytoria od siebie.
+    # One worktree location for every repo. Without this, drift-warden scattered 28
+    # worktrees across ~/.worktrees/, ~/dev/worktrees/ and the repo directory itself —
+    # every change of convention left sediment, because the default sibling directory
+    # applied. {project} keeps repositories apart.
     worktree_dir: ~/dev/worktrees/{project}
 
-    # Gałęzie nazywasz fix/..., feat/..., docs/... — basename daje płaskie katalogi
-    # i czytelne nazwy sesji zamiast zagnieżdżeń. Tak samo jak w content-ops.
+    # Branches are named fix/..., feat/..., docs/... — basename gives flat directories
+    # and readable session names instead of nesting. Same as content-ops.
     worktree_naming: basename
 
-    # 30 repozytoriów, a agentów adresuje się składnią projekt:handle. Nazwa sesji
-    # tmux musi mówić z którego repo pochodzi. content-ops nadpisuje to na "co-".
+    # 30 repositories, and agents are addressed as project:handle. The tmux session
+    # name has to say which repo it belongs to. content-ops overrides this with "co-".
     window_prefix: "{project}-"
 
     #-------------------------------------------------------------------------------
@@ -1406,25 +1406,25 @@ in
 
     base_branch: auto
 
-    # 28 nieporzuconych gałęzi w samym drift-warden. Potwierdzenie przed usunięciem
-    # niezmergowanej gałęzi zostaje włączone świadomie, nie przez przypadek.
+    # 28 unmerged branches in drift-warden alone. The confirmation before removing an
+    # unmerged branch stays on deliberately, not by accident.
     confirm_unmerged_removal: true
 
     #-------------------------------------------------------------------------------
     # Tmux
     #-------------------------------------------------------------------------------
 
-    # Sesja per worktree. Wymagane przez bloki `windows:` i zgodne z content-ops.
+    # One session per worktree. Required by `windows:` blocks and consistent with content-ops.
     mode: session
 
     #-------------------------------------------------------------------------------
-    # Agenci
+    # Agents
     #-------------------------------------------------------------------------------
 
     agent: claude
 
-    # Domyślna godzina to za mało: sam build-switch tego repo zajął 50 minut, a agent
-    # pracujący dłużej niż godzinę nie jest porzucony.
+    # The default timeout is too short: this repo's build-switch alone took 50 minutes,
+    # and an agent working longer than an hour is not abandoned.
     stale_after: 2h
 
     status_icons:
@@ -1433,14 +1433,14 @@ in
       done: "✅"
 
     #-------------------------------------------------------------------------------
-    # Hooki
+    # Hooks
     #-------------------------------------------------------------------------------
 
-    # Świeży fetch na każdym nowym worktree — klasa błędu "stary klon" przestaje być
-    # czymś do zapamiętania. `|| true` jest konieczne: post_create blokuje utworzenie
-    # okna, więc nieudany fetch wywaliłby `workmux add`. speedway ma remote wskazujący
-    # na repo, którego jeszcze nie ma na Codebergu, i fetch tam zwraca
-    # "Cannot find repository" — to realny przypadek, nie teoretyczny.
+    # Fresh fetch on every new worktree — the "stale clone" class of bug stops being
+    # something to remember. `|| true` is required: post_create blocks window creation,
+    # so a failed fetch would break `workmux add`. speedway has a remote pointing at a
+    # repo that does not exist on Codeberg yet, and the fetch there returns
+    # "Cannot find repository" — a real case, not a theoretical one.
     post_create:
       - git fetch --prune origin || true
 
@@ -1461,23 +1461,24 @@ in
     sidebar:
       position: left
       layout: tiles
-      # Grupowanie po projekcie ma sens dopiero przy wielu repo — a masz 30.
+      # Grouping by project only pays off with many repos — and there are 30.
       group_by: project
       collapse_stale: true
 
     #-------------------------------------------------------------------------------
-    # Nazwane układy paneli (wybierane przez `workmux add -l <nazwa>`)
+    # Named pane layouts (selected with `workmux add -l <name>`)
     #-------------------------------------------------------------------------------
 
-    # Hooki statusu masz zainstalowane dla obu CLI (~/.claude/settings.json oraz
-    # ~/.codex/hooks.json), więc oba raportują 🤖/💬/✅ do dashboardu i sidebara.
+    # Status hooks are installed for all three CLIs (~/.claude/settings.json,
+    # ~/.codex/hooks.json, ~/.gemini/config/hooks.json), so each reports 🤖/💬/✅ to the
+    # dashboard and sidebar.
     #
-    # Uwaga: `-l` zastępuje `panes` i NIE łączy się z `--agent`. To rozłączne tryby:
-    #   workmux add X -l duel          -> jeden worktree, dwa modele na wspólnych plikach
-    #   workmux add X -a claude,codex  -> dwa worktree, osobna gałąź dla każdego modelu
+    # Note: `-l` replaces `panes` and does NOT combine with `--agent`. They are separate modes:
+    #   workmux add X -l duel          -> one worktree, two models on shared files
+    #   workmux add X -a claude,codex  -> two worktrees, a separate branch per model
     layouts:
-      # Jeden worktree, Claude i Codex obok siebie. Dzielą to samo drzewo roboczy,
-      # więc to układ "jeden pisze, drugi czyta/recenzuje", nie do równoległej edycji.
+      # One worktree, Claude and Codex side by side. They share the same working tree,
+      # so this is a "one writes, the other reads/reviews" layout, not for parallel editing.
       duel:
         panes:
           - command: <agent>
@@ -1485,12 +1486,12 @@ in
           - command: <agent:codex>
             split: vertical
 
-      # Reviewerzy nie pytają o zgodę na każde polecenie: Codex ma `-a never` z
-      # piaskownicą `workspace-write` (pisze tylko w worktree, bez sieci), agy
-      # `--dangerously-skip-permissions`. Claude ma własny auto mode.
-      # Trzy modele na jednym drzewie: Claude pisze, Codex i Antigravity czytają.
-      # Antigravity (agy) ma hooki statusu od `workmux setup`, więc pojawia się
-      # w dashboardzie tak samo jak pozostałe dwa.
+      # The reviewers do not ask for approval on every command: Codex runs with
+      # `-a never` inside the `workspace-write` sandbox (writes only in the worktree, no
+      # network), and agy with `--dangerously-skip-permissions`. Claude has its own auto mode.
+      # Three models on one tree: Claude writes, Codex and Antigravity read.
+      # Antigravity (agy) has status hooks from `workmux setup`, so it shows up in the
+      # dashboard like the other two.
       trio:
         panes:
           - command: <agent>
@@ -1500,10 +1501,10 @@ in
           - command: agy --dangerously-skip-permissions
             split: horizontal
 
-      # Review PR bez edycji: Codex jako główny recenzent, obok Antigravity w
-      # trybie plan (nic nie zapisuje) jako tania pierwsza runda, i wolny shell.
-      # Sprawdzone na prawdziwym diffie z drift-warden: ~11 s, bez zmyślonych błędów.
-      # Repo z własnym `review` w .workmux.yaml (drift-warden, metanol) go nadpisują.
+      # PR review without edits: Codex as the main reviewer, Antigravity in plan mode
+      # (writes nothing) as a cheap first pass, and a free shell.
+      # Tried on a real drift-warden diff: ~11 s, no invented findings.
+      # Repos with their own `review` in .workmux.yaml (drift-warden, metanol) override it.
       review:
         panes:
           - command: codex -a never -s workspace-write
@@ -1513,7 +1514,7 @@ in
           - split: horizontal
             size: 25
 
-      # Agent plus wolny shell pod ręczne sprawdzenia (testy, logi, git).
+      # Agent plus a free shell for manual checks (tests, logs, git).
       solo:
         panes:
           - command: <agent>

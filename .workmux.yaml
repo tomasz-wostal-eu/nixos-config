@@ -1,10 +1,10 @@
-# workmux dla nixos-config. Ustawienia wspólne: ~/.config/workmux/config.yaml
+# workmux for nixos-config. Shared settings: ~/.config/workmux/config.yaml
 
-# To repo jest flakiem, a `nix build` widzi wyłącznie pliki w indeksie gita.
-# Niezastagowany plik .nix jest dla builda niewidoczny — przechodzi cicho, ze
-# starą zawartością, zamiast zgłosić błąd. Gate, nie raport: blokuje merge.
+# This repo is a flake, and `nix build` sees only files in the git index.
+# An unstaged .nix file is invisible to the build — it passes silently with the
+# old content instead of reporting an error. A gate, not a report: it blocks merge.
 pre_merge:
-  - 'test -z "$(git ls-files --others --exclude-standard -- "*.nix")" || { echo "niezastagowane pliki .nix — nix build ich nie zobaczy"; exit 1; }'
+  - 'test -z "$(git ls-files --others --exclude-standard -- "*.nix")" || { echo "unstaged .nix files — nix build will not see them"; exit 1; }'
 
 windows:
   - name: agent
