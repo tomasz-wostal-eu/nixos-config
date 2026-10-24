@@ -455,6 +455,107 @@ in
       };
     };
 
+    # Dashboard for the GitHub repos (mirrors and the few that live only there).
+    # Codeberg is the primary forge and has its own dashboard, tea-dash, configured
+    # in modules/shared/files.nix. Auth comes from `gh auth login`; nothing secret here.
+    gh-dash = {
+      enable = true;
+      settings = {
+        prSections = [
+          {
+            title = "My Pull Requests";
+            filters = "is:open author:@me";
+          }
+          {
+            title = "Needs My Review";
+            filters = "is:open review-requested:@me";
+          }
+          {
+            title = "Involved";
+            filters = "is:open involves:@me -author:@me";
+          }
+          # Separate sections: GitHub search ANDs `org:` and `user:`, so one filter with
+          # both would match nothing.
+          {
+            title = "Open (mistwolftech)";
+            filters = "is:open org:mistwolftech";
+          }
+          {
+            title = "Open (personal)";
+            filters = "is:open user:tomasz-wostal-eu";
+          }
+        ];
+        issuesSections = [
+          {
+            title = "My Issues";
+            filters = "is:open author:@me";
+          }
+          {
+            title = "Assigned";
+            filters = "is:open assignee:@me";
+          }
+          {
+            title = "Involved";
+            filters = "is:open involves:@me -author:@me";
+          }
+        ];
+        defaults = {
+          preview = {
+            open = true;
+            width = 0.45;
+          };
+          prsLimit = 20;
+          issuesLimit = 20;
+          view = "prs";
+          refetchIntervalMinutes = 30;
+        };
+        # Every repo is checked out as ~/projects/<repo>; nixos-config is the exception.
+        repoPaths = {
+          ":owner/:repo" = "~/projects/:repo";
+          "tomasz-wostal-eu/nixos-config" = "~/nixos-config";
+          "mistwolftech/amateur-alchemist" = "~/projects/amateur_alchemist";
+        };
+        keybindings.prs = [
+          {
+            key = "g";
+            name = "lazygit";
+            command = "tmux new-window -c {{.RepoPath}} lazygit";
+          }
+          {
+            key = "r";
+            name = "review (codex + agy)";
+            command = "tmux new-window -c {{.RepoPath}} 'pr-review {{.PrNumber}}; printf \"press enter \"; read x'";
+          }
+          {
+            key = "P";
+            name = "post reviews to the PR";
+            command = "tmux new-window -c {{.RepoPath}} 'agent-review-post \"$(workmux path pr-{{.PrNumber}})\"; printf \"press enter \"; read x'";
+          }
+        ];
+        theme = {
+          ui.table.showSeparator = true;
+          colors = {
+            text = {
+              primary = "#cad3f5";
+              secondary = "#b7bdf8";
+              inverted = "#24273a";
+              faint = "#a5adcb";
+              warning = "#eed49f";
+              success = "#a6da95";
+              error = "#ed8796";
+            };
+            background.selected = "#363a4f";
+            border = {
+              primary = "#494d64";
+              secondary = "#363a4f";
+              faint = "#363a4f";
+            };
+          };
+        };
+        confirmQuit = false;
+      };
+    };
+
     gpg = {
       enable = true;
       settings = {
