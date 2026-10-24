@@ -104,6 +104,40 @@ let
   # neomutt pane and everything else. neomutt now uses the ANSI 0-15 slots and
   # `default`, which the terminal already maps to exact Catppuccin values.)
 
+  # pi-subagents reviewer for the PR flow (see pr-review). `label` names the review
+  # file, and agent-review-post signs the PR comment with it, so the forge shows
+  # which model wrote what. `isolated` keeps MCP and skills out of the prompt —
+  # the Ollama models have 32k of context and nothing to spare.
+  piReviewer =
+    {
+      model,
+      label,
+      thinking,
+      maxTurns,
+    }:
+    ''
+      ---
+      description: Reviews one PR diff read-only and writes .workmux/review-${label}.md
+      model: ${model}
+      thinking: ${thinking}
+      tools: read, bash, grep, find, ls, write
+      isolated: true
+      max_turns: ${toString maxTurns}
+      ---
+      You review one pull request. The task names the PR number and its base ref.
+
+      Review the change shown by `git diff <base>...HEAD`. Stay inside that diff: open
+      another file only when a changed line calls into it, and do not read dependency
+      sources or build the whole project. Look for correctness bugs first, then anything
+      that would break on a clean machine.
+
+      Do not edit tracked files, commit, push or post anything to the forge. The only
+      file you create is `.workmux/review-${label}.md` at the worktree root: the review in
+      English, findings ordered by severity, each naming file:line, why it matters and
+      what you would change, ending with one line: approve, or request changes. Write it
+      before you finish, then reply with the same review.
+    '';
+
   # Signs an agent comment on a PR; used by the helper scripts below too.
   agentPrComment =
     pkgs.writeShellApplication {
@@ -732,7 +766,7 @@ in
               cd {{.RepoPath}} && lazygit
             '
         - key: r
-          name: review (codex + agy)
+          name: review (pi + subagents)
           command: >-
             tmux new-window '
               cd {{.RepoPath}} && pr-review {{.PrNumber}}; printf "press enter "; read x
@@ -1520,8 +1554,9 @@ in
   # Starts the review layout for a PR of the repo in the current directory:
   # `pr-review 42`. A repo with its own flow (scripts/dw-review, scripts/met-review)
   # keeps it; any other repo gets a worktree review/pr-<n> on the PR head with the
-  # `review` layout. The prompt tells the reviewers to stay inside the diff and to
-  # write their review to .workmux/review-<agent>.md, which agent-review-post posts.
+  # `review` layout: pi as the orchestrator, which runs the reviewer subagents
+  # (.pi/agent/agents/reviewer-*.md below). Each writes .workmux/review-<model>.md,
+  # which agent-review-post posts.
   ".local/bin/pr-review".source = pkgs.lib.getExe (
     pkgs.writeShellApplication {
       name = "pr-review";
@@ -1543,11 +1578,13 @@ in
         sha=$(git rev-parse FETCH_HEAD)
         base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null || echo origin/main)
 
-        prompt="You are the reviewer for pull request #$pr. The PR head is checked out here on branch review/pr-$pr; its base is $base.
+        prompt="You orchestrate the review of pull request #$pr. The PR head is checked out here on branch review/pr-$pr; its base is $base. You do not review it yourself: the reviewer subagents do.
 
-        Review the change shown by \`git diff $base...HEAD\`. Stay inside that diff: open another file only when a changed line calls into it, and do not read dependency sources or build the whole project. Look for correctness bugs first, then anything that would break on a clean machine.
+        1. Run \`git diff --stat $base...HEAD\` and show me the size of the change. Then ask me whether to run the second reviewer, reviewer-ollama (a local model with 32k of context: a diff of more than about 1500 lines will not fit). Wait for my answer.
+        2. Spawn reviewer-openai, and reviewer-ollama only if I said yes, in the background and in parallel. Give each the task: review PR #$pr against base $base.
+        3. When they finish, check that each wrote its .workmux/review-*.md file, and give me a short summary: the verdict and the top findings of each. Point out where they disagree.
 
-        Do not edit tracked files, commit, push or post anything to the forge. Write the review in English as findings ordered by severity, each naming file:line, why it matters and what you would change, ending with one line: approve, or request changes. Write the same review to .workmux/review-<your-name>.md as your instructions say."
+        Do not edit tracked files, commit, push or post anything to the forge. I post the reviews myself with agent-review-post."
 
         exec workmux add "review/pr-$pr" --name "pr-$pr" --base "$sha" -l review -p "$prompt"
       '';
@@ -1706,9 +1743,9 @@ in
     # Named pane layouts (selected with `workmux add -l <name>`)
     #-------------------------------------------------------------------------------
 
-    # Status hooks are installed for all three CLIs (~/.claude/settings.json,
-    # ~/.codex/hooks.json, ~/.gemini/config/hooks.json), so each reports 🤖/💬/✅ to the
-    # dashboard and sidebar.
+    # Status hooks are installed for every agent CLI (~/.claude/settings.json,
+    # ~/.codex/hooks.json, ~/.pi/agent/extensions/workmux-status.ts), so each reports
+    # 🤖/💬/✅ to the dashboard and sidebar.
     #
     # Note: `-l` replaces `panes` and does NOT combine with `--agent`. They are separate modes:
     #   workmux add X -l duel          -> one worktree, two models on shared files
@@ -1723,35 +1760,24 @@ in
           - command: <agent:codex>
             split: vertical
 
-      # The reviewers do not ask for approval on every command: Codex runs with
-      # `-a never` inside the `workspace-write` sandbox (writes only in the worktree, no
-      # network), and agy with `--dangerously-skip-permissions`. Claude has its own auto mode.
-      # Three models on one tree: Claude writes, Codex and Antigravity read.
-      # Antigravity (agy) has status hooks from `workmux setup`, so it shows up in the
-      # dashboard like the other two.
-      trio:
-        panes:
-          - command: <agent>
-            focus: true
-          - command: codex -a never -s workspace-write
-            split: vertical
-          - command: agy --dangerously-skip-permissions
-            split: horizontal
-
-      # PR review: Codex as the main reviewer, Antigravity as a second reader, and a free
-      # shell. Both write their review to .workmux/review-<agent>.md (instructions live in
-      # ~/.codex/AGENTS.md and ~/.gemini/GEMINI.md) and `agent-review-post` posts it.
-      # agy no longer runs in plan mode, which cannot write that file; nothing technical
-      # stops it from editing the review worktree, only the prompt says not to.
+      # PR review: pi (default model in ~/.pi/agent/settings.json) orchestrates the
+      # pi-subagents reviewers — reviewer-openai always, reviewer-ollama when the user
+      # says yes. Each writes .workmux/review-<model>.md and `agent-review-post` posts
+      # it. `pi` must stay a literal command: that is how workmux recognises it and
+      # injects the pr-review prompt. pi asks for no approvals; only the prompt keeps
+      # the reviewers from editing the worktree.
+      # The subagents live inside pi; pi-agent-pane gives each one a pane with its
+      # transcript and a sidebar/dashboard entry. A reviewer pi does not start just
+      # waits and never registers.
       # Repos with their own `review` in .workmux.yaml (drift-warden, metanol) override it.
       review:
         panes:
-          - command: codex -a never -s workspace-write
+          - command: pi
             focus: true
-          - command: agy --dangerously-skip-permissions
+          - command: pi-agent-pane reviewer-openai
+            split: horizontal
+          - command: pi-agent-pane reviewer-ollama
             split: vertical
-          - split: horizontal
-            size: 25
 
       # Agent plus a free shell for manual checks (tests, logs, git).
       solo:
@@ -1784,5 +1810,202 @@ in
       ];
     };
   };
+
+  # pi-subagents reviewers for pr-review (piReviewer above). gpt-6-astra is the top
+  # OpenAI tier pi lists (ChatGPT OAuth). On the Ollama box the speed is set by VRAM
+  # (~10 GB): the dense qwen3.8:27b reasons better but spills half of its 19.8 GB to
+  # the CPU, and a review of a 180-line diff ran past 78 minutes without finishing.
+  # qwen3-coder:30b is a MoE with ~3B active parameters that fits in VRAM: a warm
+  # tool call takes ~5 s. It does not reason, hence thinking off.
+  # Symlinks into the store, so `/agents` in pi shows them but cannot edit them.
+  ".pi/agent/agents/reviewer-openai.md".text = piReviewer {
+    model = "openai/gpt-6-astra";
+    label = "gpt-6-astra";
+    thinking = "high";
+    maxTurns = 60;
+  };
+  ".pi/agent/agents/reviewer-ollama.md".text = piReviewer {
+    model = "ollama/qwen3-coder:30b-32k";
+    label = "qwen3-coder-30b";
+    thinking = "off";
+    maxTurns = 15;
+  };
+
+  # pi-subagents run inside the pi process, so workmux (which tracks panes) never
+  # sees them. This bridges them out:
+  # - `suba:activity` is what workmux-status.ts (from `workmux setup`) counts to keep
+  #   pi at working while background agents run. pi-subagents does not emit it, so
+  #   without this pi showed done while its reviewers were still going.
+  # - .workmux/agents/<type>.json is what pi-agent-pane (below) follows to give each
+  #   subagent its own pane, sidebar entry and status.
+  ".pi/agent/extensions/subagents-workmux.ts".text = ''
+    import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+    import { join } from "node:path";
+    import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+    type Lifecycle = { id?: unknown; type?: unknown };
+
+    export default function (pi: ExtensionAPI) {
+      const running = new Set<string>();
+      let cwd: string | undefined;
+
+      const publish = () => pi.events.emit("suba:activity", { activeCount: running.size });
+
+      function record(data: Lifecycle, status: string) {
+        if (!cwd || typeof data.id !== "string" || typeof data.type !== "string") return;
+        if (!/^[\w.-]+$/.test(data.type)) return;
+        const manager = (globalThis as any)[Symbol.for("pi-subagents:manager")];
+        const rec = manager?.getRecord?.(data.id);
+        try {
+          const dir = join(cwd, ".workmux", "agents");
+          mkdirSync(dir, { recursive: true });
+          const file = join(dir, `''${data.type}.json`);
+          writeFileSync(`''${file}.tmp`, JSON.stringify({
+            id: data.id,
+            status,
+            outputFile: rec?.outputFile,
+            updated: Date.now(),
+          }));
+          renameSync(`''${file}.tmp`, file);
+        } catch {
+          // A read-only or vanished worktree must not break the session.
+        }
+      }
+
+      function on(event: string, status: string, active: boolean) {
+        pi.events.on(event, (data) => {
+          const d = (data ?? {}) as Lifecycle;
+          if (typeof d.id !== "string") return;
+          if (active) running.add(d.id);
+          else running.delete(d.id);
+          record(d, status);
+          publish();
+        });
+      }
+
+      pi.on("session_start", async (_event, ctx) => {
+        cwd = ctx.cwd;
+        running.clear();
+      });
+      // workmux-status asks once it has subscribed, in case agents already run.
+      pi.events.on("suba:activity:request", publish);
+      on("subagents:started", "working", true);
+      on("subagents:completed", "done", false);
+      on("subagents:failed", "failed", false);
+    }
+  '';
+
+  # One pane per reviewer in the `review` layout: `pi-agent-pane reviewer-openai`.
+  # Waits for pi to start that subagent, then registers the pane with workmux and
+  # mirrors the agent's status (sidebar, dashboard) and its transcript. It has to be
+  # one long-lived process: workmux forgets an agent whose pane changes its
+  # foreground command.
+  ".local/bin/pi-agent-pane".source = pkgs.lib.getExe (
+    pkgs.writers.writePython3Bin "pi-agent-pane" { flakeIgnore = [ "E501" ]; } ''
+      import glob
+      import json
+      import os
+      import subprocess
+      import sys
+      import tempfile
+      import time
+
+      DIM, BOLD, RED, GREEN, OFF = "\033[2m", "\033[1m", "\033[31m", "\033[32m", "\033[0m"
+
+      agent = sys.argv[1] if len(sys.argv) == 2 else sys.exit("usage: pi-agent-pane <subagent-type>")
+      git = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+      root = git.stdout.strip() or os.getcwd()
+      state_file = os.path.join(root, ".workmux", "agents", f"{agent}.json")
+
+
+      def workmux(*args):
+          subprocess.run(["workmux", *args], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+      def title(text):
+          sys.stdout.write(f"\033]2;{text}\033\\")
+          sys.stdout.flush()
+
+
+      def transcript(state, agent_id):
+          path = state.get("outputFile")
+          if path and os.path.exists(path):
+              return path
+          # pi-subagents' layout: <tmp>/pi-subagents-<uid>/<cwd, / -> ->/<session>/tasks/<id>.output
+          cwd = root.replace("/", "-").lstrip("-")
+          base = os.path.join(tempfile.gettempdir(), f"pi-subagents-{os.getuid()}", cwd)
+          found = glob.glob(os.path.join(glob.escape(base), "*", "tasks", f"{glob.escape(agent_id)}.output"))
+          return found[0] if found else None
+
+
+      def clip(text, width=200):
+          text = " ".join(str(text).split())
+          return text if len(text) <= width else text[: width - 1] + "…"
+
+
+      def render(line):
+          try:
+              message = json.loads(line).get("message") or {}
+          except json.JSONDecodeError:
+              return
+          role, content = message.get("role"), message.get("content")
+          blocks = content if isinstance(content, list) else [{"type": "text", "text": content or ""}]
+          for block in blocks:
+              kind = block.get("type")
+              if role == "assistant" and kind == "text" and block.get("text", "").strip():
+                  print(block["text"].strip())
+              elif role == "assistant" and kind == "toolCall":
+                  args = block.get("arguments") or {}
+                  shown = args.get("command") or args.get("path") or json.dumps(args)
+                  print(f"{BOLD}› {block.get('name')}{OFF} {clip(shown)}")
+              elif role == "toolResult" and kind == "text":
+                  colour = RED if message.get("isError") else DIM
+                  print(f"{colour}  {clip(block.get('text', '''), 160)}{OFF}")
+              elif role == "user" and kind == "text":
+                  print(f"{DIM}task: {clip(block.get('text', '''), 400)}{OFF}")
+          sys.stdout.flush()
+
+
+      title(f"{agent} · idle")
+      print(f"{DIM}{agent}: waiting for pi to start it{OFF}", flush=True)
+      registered, current, path, offset, buffer, shown_status = False, None, None, 0, "", None
+      while True:
+          try:
+              with open(state_file) as f:
+                  state = json.load(f)
+          except (OSError, json.JSONDecodeError):
+              state = None
+          if state and state.get("id") != current:
+              current, path, offset, buffer, shown_status = state["id"], None, 0, "", None
+              print(f"\n{BOLD}── {agent} run {current}{OFF}", flush=True)
+              if not registered:
+                  workmux("register-agent")
+                  registered = True
+          if state:
+              path = path or transcript(state, current)
+              if path:
+                  try:
+                      with open(path) as f:
+                          f.seek(offset)
+                          chunk = f.read()
+                          offset = f.tell()
+                  except OSError:
+                      chunk = ""
+                  buffer += chunk
+                  *lines, buffer = buffer.split("\n")
+                  for line in lines:
+                      render(line)
+              status = state.get("status")
+              if status != shown_status:
+                  shown_status = status
+                  workmux("set-window-status", "working" if status == "working" else "done")
+                  title(f"{agent} · {status}")
+                  if status == "done":
+                      print(f"{GREEN}── {agent} done{OFF}", flush=True)
+                  elif status == "failed":
+                      print(f"{RED}── {agent} failed or was stopped{OFF}", flush=True)
+          time.sleep(1)
+    ''
+  );
 
 }

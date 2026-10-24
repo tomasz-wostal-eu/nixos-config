@@ -533,7 +533,7 @@ in
           }
           {
             key = "r";
-            name = "review (codex + agy)";
+            name = "review (pi + subagents)";
             command = "tmux new-window -c {{.RepoPath}} 'pr-review {{.PrNumber}}; printf \"press enter \"; read x'";
           }
           {
@@ -1289,7 +1289,6 @@ in
       git = true;
     };
 
-    antigravity-cli.enable = true; # formerly gemini-cli
     fzf = {
       enable = true;
       # Atuin owns Ctrl-R for shell history

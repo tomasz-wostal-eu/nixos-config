@@ -6,17 +6,12 @@ parallel, and how a PR gets reviewed and commented on — for both **Codeberg**
 (the primary forge) and **GitHub** (mirrors and GitHub-only repos).
 
 The whole flow is built on **[workmux](https://github.com/raine/workmux)** (git
-worktrees + tmux sessions) plus a set of small helper scripts. The "sub-agents"
-are independent coding CLIs — `claude`, `codex`, and `agy` (Antigravity) — each
-running in its own tmux pane against a shared or per-agent worktree. workmux is
-the orchestrator; it creates the worktrees, lays out the panes, and tracks each
-agent's status via hooks.
-
-> Orchestration model: agents are **separate processes coordinated by workmux**,
-> not sub-agents spawned inside a single runtime. `pi` is present on these
-> machines only as an Ollama client (`~/.pi/agent/models.json`) and via the
-> `herdr` runtime; it is **not** the orchestrator of this PR flow. See
-> [Note on `pi` and orchestration](#note-on-pi-and-orchestration).
+worktrees + tmux sessions) plus a set of small helper scripts. Authoring agents
+(`claude`, `codex`) are independent CLIs, each in its own tmux pane. PR review
+runs one `pi` session in a pane, which orchestrates in-process reviewer
+sub-agents ([pi-subagents](https://github.com/tintinweb/pi-subagents)). workmux
+creates the worktrees, lays out the panes, and tracks each agent's status via
+hooks.
 
 ## Components
 
@@ -28,20 +23,41 @@ agent's status via hooks.
 | `wja` | Start a task from a Jira key → fresh branch + worktree + prompt | `modules/shared/files.nix` (`.local/bin/wja`) |
 | `pr-review` | Open the `review` layout for a PR (checks out the PR head) | `modules/shared/files.nix` (`.local/bin/pr-review`) |
 | `agent-review-post` | Collect reviewer files and post them to the PR (with preview) | `modules/shared/files.nix` (`.local/bin/agent-review-post`) |
+| `pi-agent-pane` | One pane per pi sub-agent: live transcript + workmux status | `modules/shared/files.nix` (`.local/bin/pi-agent-pane`) |
+| `subagents-workmux.ts` | pi extension: publishes sub-agent lifecycle for workmux | `modules/shared/files.nix` (`.pi/agent/extensions/`) |
 | `agent-pr-comment` | Post one signed comment to the PR for the current branch | `modules/shared/files.nix` (`.local/bin/agent-pr-comment`) |
 | `codeberg-tasks` | Import Codeberg (Forgejo) issues into taskwarrior | `modules/shared/codeberg-tasks.py` |
 
-### Agents (the "sub-agents")
+### Agents
 
 - `claude` — primary author (installed as a cask).
-- `codex` — reviewer / second author; runs with `-a never -s workspace-write`
-  so it writes only inside its worktree and asks for nothing.
-- `agy` — Antigravity CLI, a second reviewer; runs with
-  `--dangerously-skip-permissions`.
+- `codex` — second author / reader in the `duel` layout.
+- `pi` — review orchestrator. Default model `claude-bridge/claude-opus-5-5`
+  (`~/.pi/agent/settings.json`, mutable: pi rewrites it itself). It does not
+  review; it runs the reviewer sub-agents:
+  - `reviewer-openai` — `openai/gpt-6-astra`, thinking high. Always runs.
+  - `reviewer-ollama` — `ollama/qwen3-coder:30b-32k` on the LAN box, no
+    thinking, at most 15 turns. Optional: pi asks before running it. 32k of
+    context, so it is only useful for diffs up to roughly 1500 lines. A MoE
+    model that fits the box's VRAM; the dense `qwen3.8:27b` did not, and one
+    review with it ran past 78 minutes.
+
+  Both are defined in `modules/shared/files.nix` (`piReviewer`), land in
+  `~/.pi/agent/agents/`, run `isolated` (built-in tools only, no MCP or skills)
+  and write `.workmux/review-<model>.md`.
 
 Each CLI has workmux status hooks installed (`~/.claude/settings.json`,
-`~/.codex/hooks.json`, `~/.gemini/config/hooks.json`) so it reports
-🤖 working / 💬 waiting / ✅ done to the workmux dashboard and sidebar.
+`~/.codex/hooks.json`, `~/.pi/agent/extensions/workmux-status.ts`) so it
+reports 🤖 working / 💬 waiting / ✅ done to the workmux dashboard and sidebar.
+
+pi's sub-agents live inside the pi process, which workmux cannot see. The
+`subagents-workmux.ts` extension bridges them: it keeps pi itself at 🤖 while
+background sub-agents run (the `suba:activity` count that `workmux-status.ts`
+reads), and writes each sub-agent's state to `.workmux/agents/<type>.json`.
+`pi-agent-pane <type>` follows that file: once pi starts the sub-agent, the
+pane registers with workmux (its own sidebar/dashboard entry), mirrors the
+status and prints the transcript. A reviewer pi never starts stays an idle
+pane and never shows up in the sidebar.
 
 ## The flow
 
@@ -63,7 +79,6 @@ For ad-hoc work without a Jira key, use `workmux add` directly:
 
 ```sh
 workmux add feat/my-change                 # one worktree, the default agent (claude)
-workmux add feat/my-change -l trio         # claude + codex + agy on one tree
 workmux add feat/my-change -a claude,codex # two worktrees, one branch per model
 ```
 
@@ -73,8 +88,7 @@ Layouts (`-l`) and `--agent` are **separate modes** and do not combine:
 |--------|-------|-----|
 | `solo` | agent + free shell | one agent + shell (pass `-l solo`; omitting `-l` opens only the agent pane) |
 | `duel` | claude + codex (shared tree) | one writes, one reviews |
-| `trio` | claude + codex + agy (shared tree) | one writes, two read |
-| `review` | codex + agy + free shell | PR review (see below) |
+| `review` | pi + one `pi-agent-pane` per reviewer | PR review (see below) |
 
 ### 2. Review a PR
 
@@ -87,11 +101,14 @@ pr-review 42
 `pr-review`:
 - fetches the PR head (`refs/pull/42/head`) and checks it out on a worktree
   branch `review/pr-42`,
-- opens the `review` layout (codex as main reviewer, agy as second reader, plus a
-  shell),
-- prompts both reviewers to stay inside `git diff <base>...HEAD`, **not** to edit
-  / commit / push / post anything, and to write their review in English to
-  `.workmux/review-<agent>.md`.
+- opens the `review` layout (pi plus a pane for each reviewer) and hands pi a prompt that makes it:
+  1. show `git diff --stat` and **ask whether to run `reviewer-ollama`** too,
+  2. spawn `reviewer-openai` (and `reviewer-ollama` on yes) in the background, in
+     parallel,
+  3. summarise each verdict and top findings, and point out disagreements.
+- the reviewers stay inside `git diff <base>...HEAD`, do **not** edit / commit /
+  push / post anything, and write their review in English to
+  `.workmux/review-gpt-6-astra.md` / `.workmux/review-qwen3-coder-30b.md`.
 
 Overrides: `scripts/dw-review` / `scripts/met-review`, if present and executable,
 replace `pr-review` **entirely** (they are `exec`'d before the fetch and prompt).
@@ -110,7 +127,8 @@ agent-review-post -y .                       # post all without prompting
 ```
 
 Each review is shown, then (unless `-y`) you confirm before it is posted as a
-signed comment. A posted file is renamed `*.md.posted`; a failed post is kept for
+signed comment. The signature is the model from the file name, e.g.
+`**gpt-6-astra**`. A posted file is renamed `*.md.posted`; a failed post is kept for
 a retry. Posting is deliberately a manual step — it is visible on the forge.
 
 ### 4. Leave an ad-hoc signed comment
@@ -142,9 +160,10 @@ A few binaries are installed by hand and are expected on `$PATH`:
 
 - `workmux` — `nix profile install github:raine/workmux` (only its config is
   declarative; a fresh machine needs this one command).
-- `agy` — the Antigravity CLI. **Not** defined anywhere in this repo; install it
-  separately or the `trio` / `review` layouts will fail to start that pane.
-- `codex`, `claude`, `gemini` — installed via packages / casks.
+- `codex`, `claude`, `gemini`, `pi` — installed via packages / casks.
+- pi packages `pi-claude-bridge` and `@tintinweb/pi-subagents` (`pi install
+  npm:<name>`; listed in the mutable `~/.pi/agent/settings.json`), and pi logins
+  for Anthropic and OpenAI (`/login`, stored in `~/.pi/agent/auth.json`).
 
 Forge auth and tokens (never stored in the Nix store):
 
@@ -166,14 +185,8 @@ Forge auth and tokens (never stored in the Nix store):
 
 ## Note on `pi` and orchestration
 
-The question "is this configured so that `pi` manages the agents?" — **no, not
-currently.** The PR flow is orchestrated by **workmux**, which runs each agent as
-an independent CLI process in its own tmux pane. `pi` on these machines is
-configured only as:
-
-- an Ollama LAN client (`~/.pi/agent/models.json`, see `modules/shared/files.nix`), and
-- one of the runtimes `herdr` can keep alive per project.
-
-If the goal is to have `pi` itself orchestrate the reviewers as in-process
-sub-agents (rather than workmux spawning separate CLIs), that is a different
-design and is **not** implemented here yet.
+Two orchestration models coexist. Authoring is **workmux-orchestrated**: each
+agent is a separate CLI process in its own pane. Review is **pi-orchestrated**:
+one `pi` session spawns the reviewers as in-process sub-agents
+(pi-subagents), so the optional second reviewer is a question pi asks, not a
+pane that always starts. `pi` is also one of the runtimes `herdr` keeps alive.
