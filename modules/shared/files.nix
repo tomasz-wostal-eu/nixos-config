@@ -2927,8 +2927,8 @@ in
   #   pane for the same reviewer.
   # - `pi-agent-pane --id <id>` (opened by the extension for every other subagent)
   #   follows .workmux/agents/by-id/<id>.json, is named after its `type`, registers
-  #   at once, and closes PI_AGENT_PANE_LINGER seconds (default 120) after the run
-  #   ends, long enough to see the done mark in the sidebar.
+  #   at once, and closes as soon as the run succeeds. A failed or stopped run keeps
+  #   the pane PI_AGENT_PANE_LINGER seconds (default 30), long enough to read why.
   # Either way it mirrors the agent's status (sidebar, dashboard) and its transcript.
   # It has to be one long-lived process: workmux forgets an agent whose pane changes
   # its foreground command.
@@ -2960,9 +2960,9 @@ in
       agents_dir = os.path.join(root, ".workmux", "agents")
       state_file = os.path.join(agents_dir, "by-id", f"{name}.json") if by_id else os.path.join(agents_dir, f"{name}.json")
       try:
-          linger = int(os.environ.get("PI_AGENT_PANE_LINGER", "120"))
+          linger = int(os.environ.get("PI_AGENT_PANE_LINGER", "30"))
       except ValueError:
-          linger = 120
+          linger = 30
 
 
       def workmux(*args):
@@ -3084,7 +3084,9 @@ in
                           print(f"{GREEN}── {label} done{OFF}", flush=True)
                       elif status == "failed":
                           print(f"{RED}── {label} failed or was stopped{OFF}", flush=True)
-                      if by_id and status in ("done", "failed"):
+                      if by_id and status == "done":
+                          return
+                      if by_id and status == "failed":
                           finished = time.time()
                           closes = time.strftime("%H:%M:%S", time.localtime(finished + linger))
                           print(f"{DIM}pane closes at {closes} (PI_AGENT_PANE_LINGER={linger}s){OFF}", flush=True)

@@ -90,9 +90,9 @@ prints the transcript.
 - Every other sub-agent (Explore, general-purpose, `scout`, `worker`, ...) gets a
   pane when it starts: the extension runs `pi-agent-pane --id <id>`, the first one
   as a 40% column split off pi's pane, later ones stacked below the previous one.
-  The pane is named after the sub-agent type and registers at once. After the run
-  ends it stays `PI_AGENT_PANE_LINGER` seconds (default 120) so the ✅ is visible,
-  then closes and workmux drops it.
+  The pane is named after the sub-agent type and registers at once. It closes as
+  soon as the run succeeds, and workmux drops it. A failed or stopped run keeps
+  the pane `PI_AGENT_PANE_LINGER` seconds (default 30) so the error can be read.
 
 No dynamic pane is opened outside tmux, when pi has no UI (`pi -p`, e.g.
 `dw-review --quick`), when `PI_AGENT_PANES=0`, or when a live layout pane already
