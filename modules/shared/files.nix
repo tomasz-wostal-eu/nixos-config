@@ -1007,7 +1007,7 @@ in
     msg = email.message_from_binary_file(sys.stdin.buffer, policy=email.policy.default)
     body = msg.get_body(preferencelist=("html",))
     if body is None:
-        sys.exit("ta wiadomosc nie ma czesci text/html")
+        sys.exit("this message has no text/html part")
 
     out = os.path.expanduser("~/.cache/neomutt/preview.html")
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -1088,7 +1088,7 @@ in
     # …but a multipart/alternative mail whose text/plain half is the usual
     # "view this in a browser" stub still reads better as HTML: <esc>h renders
     # the current message's HTML part in the real browser.
-    macro index,pager <esc>h "<pipe-message>~/.local/bin/mail-html-open<enter>" "HTML w przegladarce"
+    macro index,pager <esc>h "<pipe-message>~/.local/bin/mail-html-open<enter>" "HTML in browser"
 
     # ---------------------------------------------------------------- sidebar
     set sidebar_visible = yes
@@ -1170,7 +1170,7 @@ in
   # may be invoked from neomutt with a minimal PATH.
   ".local/bin/msmtp-oauth-token".source = pkgs.writeShellScript "msmtp-oauth-token" ''
     set -euo pipefail
-    cfg="$HOME/.config/msmtp/''${1:?podaj nazwe konta}-oauth.json"
+    cfg="$HOME/.config/msmtp/''${1:?provide the account name}-oauth.json"
     jq="${pkgs.jq}/bin/jq"
     ${pkgs.curl}/bin/curl -s --fail \
       -d client_id="$("$jq" -r .client_id "$cfg")" \
@@ -1361,7 +1361,7 @@ in
       chmod 600 "$2"
       echo "  $2"
     }
-    echo "Odtwarzam z pass:"
+    echo "Restoring from pass:"
     r email/oauth/vdirsyncer-client-id     "$HOME/.config/vdirsyncer/client_id"
     r email/oauth/vdirsyncer-client-secret "$HOME/.config/vdirsyncer/client_secret"
     r email/oauth/lieer-client.json        "$HOME/.config/lieer/client_secret.json"
@@ -1369,7 +1369,7 @@ in
     r email/oauth/msmtp-itomm.json         "$HOME/.config/msmtp/itomm-oauth.json"
     r codeberg/api-token                   "$HOME/.config/codeberg/token"
     echo
-    echo "NIE do odtworzenia (stan runtime, rotowany przez same narzedzia):"
+    echo "NOT restorable (runtime state, rotated by the tools themselves):"
     echo "  ~/Mail/{gmail,itomm}/.credentials.gmailieer.json"
     echo "    -> gmi auth -C ~/Mail/<repo> -c ~/.config/lieer/client_secret.json"
     echo "  ~/.local/share/vdirsyncer/{google,itomm}_token"
@@ -1381,11 +1381,11 @@ in
   ".local/bin/secrets-backup".source = pkgs.writeShellScript "secrets-backup" ''
     set -euo pipefail
     b() {
-      [ -f "$2" ] || { echo "  pomijam (brak): $2"; return 0; }
+      [ -f "$2" ] || { echo "  skipping (missing): $2"; return 0; }
       ${pkgs.pass}/bin/pass insert -m -f "$1" < "$2" >/dev/null
       echo "  $1 <- $2"
     }
-    echo "Zapisuje do pass:"
+    echo "Saving to pass:"
     b email/oauth/vdirsyncer-client-id     "$HOME/.config/vdirsyncer/client_id"
     b email/oauth/vdirsyncer-client-secret "$HOME/.config/vdirsyncer/client_secret"
     b email/oauth/lieer-client.json        "$HOME/.config/lieer/client_secret.json"
@@ -1393,7 +1393,7 @@ in
     b email/oauth/msmtp-itomm.json         "$HOME/.config/msmtp/itomm-oauth.json"
     b codeberg/api-token                   "$HOME/.config/codeberg/token"
     if ${pkgs.git}/bin/git -C "$HOME/.password-store" rev-parse --git-dir >/dev/null 2>&1; then
-      ${pkgs.pass}/bin/pass git push 2>/dev/null && echo "  wypchnieto na remote" || echo "  (push nieudany - sprawdz remote)"
+      ${pkgs.pass}/bin/pass git push 2>/dev/null && echo "  pushed to remote" || echo "  (push failed - check remote)"
     fi
   '';
 

@@ -113,7 +113,7 @@ in
                 # Discover is run only on failure, never pre-emptively: doing it
                 # each cycle would defeat that guard and silently adopt any new
                 # remote calendar. Note the retry DOES accept new collections.
-                echo "sync nieudany -> discover + jedna ponowna proba"
+                echo "sync failed -> discover + one retry"
                 yes | "$vd" -v ERROR discover >/dev/null 2>&1 || true
                 exec "$vd" -v ERROR sync
               ''}"
@@ -145,10 +145,10 @@ in
                   d="$HOME/Mail/$repo"
                   [ -d "$d" ] || continue
                   if "$gmi" pull -C "$d" -q -s; then
-                    "$gmi" push -C "$d" -q -s || { echo "push nieudany: $repo"; rc=1; }
+                    "$gmi" push -C "$d" -q -s || { echo "push failed: $repo"; rc=1; }
                   else
                     # No push on a failed pull — that is the whole point.
-                    echo "pull nieudany: $repo (pomijam push)"
+                    echo "pull failed: $repo (skipping push)"
                     rc=1
                   fi
                 done
@@ -200,7 +200,7 @@ in
                   ( cd "$d" \
                       && git fetch -q origin $refs 2>/dev/null \
                       && git push -q --no-verify origin $refs 2>/dev/null ) \
-                    || { echo "sync nieudany: $r"; rc=1; }
+                    || { echo "sync failed: $r"; rc=1; }
                 done
                 ${pkgs.python3Packages.bugwarrior}/bin/bugwarrior pull || rc=1
                 # Codeberg's native tracker — the issues actually worked from.

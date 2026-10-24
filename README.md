@@ -91,6 +91,7 @@ flake.nix              # Entry point
 - Ghostty terminal
 - tmux with custom keybindings
 - Terminal mail, calendar and issue tracking (see below)
+- Multi-agent PR workflow on workmux (Codeberg + GitHub) — see [docs/agent-pr-flow.md](docs/agent-pr-flow.md)
 
 ## Mail, calendar, tasks
 

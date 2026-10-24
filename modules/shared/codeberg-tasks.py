@@ -26,7 +26,7 @@ def token():
         with open(TOKEN_FILE) as fh:
             return fh.read().strip()
     except FileNotFoundError:
-        sys.exit(f"brak tokenu: {TOKEN_FILE}")
+        sys.exit(f"missing token: {TOKEN_FILE}")
 
 
 def api(path, tok):
@@ -77,7 +77,7 @@ def main():
     tok = token()
     repos = discover_repos()
     if not repos:
-        sys.exit("nie znalazlem repozytoriow z remote na codeberg.org")
+        sys.exit("no repositories with a codeberg.org remote found")
 
     open_issues = {}
     # Repos whose issue list could not be fetched. Their tasks must be left
@@ -96,11 +96,11 @@ def main():
             try:
                 batch = api(f"/repos/{owner}/{name}/issues?{q}", tok)
             except urllib.error.HTTPError as e:
-                print(f"  {slug}: HTTP {e.code} (pomijam)")
+                print(f"  {slug}: HTTP {e.code} (skipping)")
                 failed.add(slug)
                 break
             except Exception as e:
-                print(f"  {slug}: {e} (pomijam)")
+                print(f"  {slug}: {e} (skipping)")
                 failed.add(slug)
                 break
             for i in batch:
@@ -146,14 +146,14 @@ def main():
         task(row["uuid"], "done")
         closed += 1
 
-    print(f"repozytoria: {len(repos)}  otwartych issue: {len(open_issues)}  "
-          f"dodano: {added}  zamknieto: {closed}"
-          + (f"  nietkniete (repo bez odpowiedzi): {skipped}" if skipped else ""))
+    print(f"repos: {len(repos)}  open issues: {len(open_issues)}  "
+          f"added: {added}  closed: {closed}"
+          + (f"  untouched (repo did not respond): {skipped}" if skipped else ""))
 
     if failed:
         # Non-zero so the launchd log shows the run as failed rather than as a
         # clean sync that happened to close nothing.
-        sys.exit(f"repozytoria bez odpowiedzi: {', '.join(sorted(failed))}")
+        sys.exit(f"repos with no response: {', '.join(sorted(failed))}")
 
 
 if __name__ == "__main__":
