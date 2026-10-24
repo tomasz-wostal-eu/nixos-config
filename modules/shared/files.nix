@@ -2736,14 +2736,18 @@ in
   # Cheap general-purpose subagents, on the Claude subscription. Always a full
   # claude-bridge/<id>: a bare "sonnet" resolves to the pay-per-use anthropic provider,
   # and ChatGPT OAuth rejects the mini OpenAI models. Descriptions stay double-quoted
-  # (see piReviewer).
+  # (see piReviewer). Not `isolated`: that loads no extensions, and pi-claude-bridge
+  # refuses a subagent whose system prompt its own before_agent_start hook never
+  # recorded ("prompt-capture: no capture for this ... system prompt"). So load the
+  # bridge alone, which keeps MCP and skills out just the same.
   ".pi/agent/agents/scout.md".text = ''
     ---
     description: "Fast read-only search: find files, grep symbols, answer where X is defined; returns paths and short excerpts"
     model: claude-bridge/claude-haiku-4-5
     thinking: off
     tools: read, bash, grep, find, ls
-    isolated: true
+    extensions: [pi-claude-bridge]
+    skills: false
     max_turns: 20
     ---
     You search a codebase and report what you find. You are read-only: never edit,
@@ -2758,7 +2762,8 @@ in
     model: claude-bridge/claude-sonnet-5-5
     thinking: low
     tools: read, bash, grep, find, ls, edit, write
-    isolated: true
+    extensions: [pi-claude-bridge]
+    skills: false
     ---
     You implement one well-specified change. Do exactly the task, and touch only the
     paths it names. Do not commit, push or post anything to a forge unless the task

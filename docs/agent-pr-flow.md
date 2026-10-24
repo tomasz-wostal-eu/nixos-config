@@ -53,7 +53,10 @@ hooks.
   and write `.workmux/review-<model>.md`. The Ollama base URL is one binding,
   `ollamaUrl`, shared by pi's `models.json` and `pi-ollama-up`.
 - General-purpose sub-agents for any pi session, all on the Claude subscription
-  (`claude-bridge/...`, isolated):
+  (`claude-bridge/...`). They load only the `pi-claude-bridge` extension and no
+  skills rather than running `isolated`: an isolated sub-agent loads no
+  extensions, so the bridge never records its system prompt and refuses every
+  turn with `prompt-capture: no capture for this ... system prompt`.
   - `scout` — `claude-haiku-4-5`, thinking off, read-only tools, at most 20 turns.
     Searching and reading: where is X defined, which files mention Y.
   - `worker` — `claude-sonnet-5-5`, thinking low, with `edit` and `write`.
