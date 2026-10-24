@@ -2,9 +2,9 @@
 ```
 .
 ├── config             # Config files not written in Nix
-├── default.nix        # Defines module, system-level config,
+├── default.nix        # Defines module, system-level config
 ├── disk-config.nix    # Disks, partitions, and filesystems
-├── files.nix          # Non-Nix, static configuration files (now immutable!)
+├── files.nix          # Non-Nix, static configuration files (immutable)
 ├── home-manager.nix   # Defines user programs
 ├── packages.nix       # List of packages to install for NixOS
 ```
@@ -74,7 +74,7 @@ nix run .#build-switch -- --host hostname
 
 The `--host` flag allows targeting specific named hosts instead of the default platform-based configuration, enabling per-host customization while sharing the base configuration.
 
-**Example:** Check out the `garfield` host in the [main repository](https://github.com/dustinlyones/nixos-config) to see how it differs from the default configuration with Nvidia graphics, different packages, simplified services, etc.
+**Example:** Check out the `garfield` host in the [main repository](https://github.com/dustinlyons/nixos-config) to see how it differs from the default configuration with Nvidia graphics, different packages, simplified services, etc.
 
 ## Essential Hotkeys
 
@@ -89,7 +89,7 @@ After your first boot, here are the essential hotkeys to get started with the bs
 
 ### Window Management
 - **Super + h/j/k/l** - Focus window (left/down/up/right)
-- **Super + Shift + h/j/k/l** - Move window (left/down/up/right)
+- **Super + Shift + h/j/k/l** - Swap window (left/down/up/right)
 - **Super + f** - Toggle fullscreen
 - **Super + d** - Toggle floating/tiled mode
 - **Super + m** - Toggle monocle layout
@@ -101,7 +101,6 @@ After your first boot, here are the essential hotkeys to get started with the bs
 - **Super + Tab** - Switch to last workspace
 
 ### Applications
-- **Super + Alt + Enter** - Open Emacs
 - **Ctrl + Alt + Enter** - Open web browser
 - **Super + Shift + Space** - Open file manager
 - **Super + Shift + x** - Open KeePassXC password manager

@@ -56,8 +56,11 @@ This repo uses Nix Flakes to manage both NixOS machines and Macs from a single c
 ## Usage
 
 ```bash
-# Build and switch (auto-detects platform)
+# Build and switch (auto-detects platform); bumps overlays/ packages first
 nix run .#build-switch
+
+# Build only, no switch (macOS)
+nix run .#build
 
 # Update flake inputs
 nix flake update
@@ -65,9 +68,15 @@ nix flake update
 # Bump the packages built from overlays/ (flake update does not touch those)
 nix run .#update-overlays
 
+# Roll back to a previous generation (macOS)
+nix run .#rollback
+
 # Clean old generations
 nix run .#clean
 ```
+
+`build-switch` runs `update-overlays` before building; a failed bump is not
+fatal, and `SKIP_OVERLAY_UPDATE=1` skips it.
 
 ## Structure
 
@@ -80,18 +89,69 @@ flake.nix              # Entry point
 │   ├── nixos/         # NixOS-specific modules
 │   ├── darwin/        # macOS-specific modules
 │   └── shared/        # Shared configuration
-└── apps/              # Helper scripts
+├── overlays/          # Package overrides and pins, applied to every build
+├── apps/<system>/     # Helper scripts exposed as `nix run .#<name>`
+└── docs/              # Longer write-ups (agent PR flow)
 ```
 
 ## Features
 
-- Zsh with oh-my-zsh, starship prompt, atuin history
+- Zsh with oh-my-zsh, plus Nushell; both get starship, atuin, carapace, zoxide and direnv
 - LazyVim (Neovim) with LSP support
-- Catppuccin Macchiato theme
-- Ghostty terminal
+- Catppuccin Macchiato theme everywhere (Ghostty, tmux, pi, terminal apps)
+- Ghostty terminal (90% opacity, background blur)
 - tmux with custom keybindings
+- pi coding agent with sub-agents and MCP servers (see below)
 - Terminal mail, calendar and issue tracking (see below)
 - Multi-agent PR workflow on workmux (Codeberg + GitHub) — see [docs/agent-pr-flow.md](docs/agent-pr-flow.md)
+
+## Shells
+
+Zsh is the login shell; Nushell is configured alongside it from the same
+`shellAliases`. Two deliberate differences:
+
+- eza's Nushell integration stays off, so `ls` remains Nushell's built-in that
+  returns a table instead of text.
+- The sesh alias `s` is overridden for Nushell, which cannot parse bash's
+  `$(...)`; it uses a `(...)` subexpression instead.
+
+### `argo`
+
+Both shells wrap the `argo` CLI to talk to Argo Workflows on mistwolf-dev
+(`workflows-cli.tailc90e09.ts.net`) without a manual login. On first use it
+mints a 1 h token for the `argo-cli` service account with `kubectl --context
+mistwolf-dev create token`, caches it in `$XDG_CACHE_HOME/argo-cli/token`
+(0600) and reuses it for 55 min.
+
+```bash
+argo login    # mint a fresh token now, print its expiry
+argo logout   # drop the cached token
+argo list     # in Nushell: a table, e.g. `argo list | where status == Failed`
+```
+
+The wrapper steps aside when `ARGO_SERVER` is already set and for
+`version`/`completion`/`help`. In Nushell `argo list` returns a table only
+without `-o`/`--output`.
+
+## pi
+
+pi is the agent harness for PR review and
+general work. Its sub-agents, reviewers and the workmux integration are described
+in [docs/agent-pr-flow.md](docs/agent-pr-flow.md). Everything else lives in
+`modules/shared/files.nix`:
+
+- **MCP servers** in `~/.config/mcp/mcp.json`, read by pi-mcp-adapter: atlassian,
+  google-workspace, grafana, slack, chrome (Claude in Chrome), kubernetes and
+  argocd. Destructive tools require approval. Secrets are never in the store:
+  an env value starting with `!` runs a command when the server starts, which
+  reads a 0600 file or Azure Key Vault. `secrets-restore` recreates those files.
+  The comment above `mcp.json` explains auth and rotation for each server.
+- **Theme**: Catppuccin Macchiato from the `pi-catppuccin` npm package, linked
+  into `~/.pi/agent/themes/`. Select it with `"theme"` in the mutable
+  `~/.pi/agent/settings.json` (or `/settings`).
+- **Keys**: tmux sets `extended-keys-format csi-u`; by default it forwards
+  modified keys (shift-enter etc.) in the xterm modifyOtherKeys format, which
+  pi does not understand.
 
 ## Mail, calendar, tasks
 
