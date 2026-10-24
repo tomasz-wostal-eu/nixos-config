@@ -1698,6 +1698,7 @@ in
     r email/oauth/msmtp-itomm.json         "$HOME/.config/msmtp/itomm-oauth.json"
     r codeberg/api-token                   "$HOME/.config/codeberg/token"
     r slack/mcp-client-secret              "$HOME/.config/slack/mcp-client-secret"
+    r argocd/mcp-api-token                 "$HOME/.config/argocd/mcp-api-token"
     echo
     echo "NOT restorable (runtime state, rotated by the tools themselves):"
     echo "  ~/Mail/{gmail,itomm}/.credentials.gmailieer.json"
@@ -1725,6 +1726,7 @@ in
     b email/oauth/msmtp-itomm.json         "$HOME/.config/msmtp/itomm-oauth.json"
     b codeberg/api-token                   "$HOME/.config/codeberg/token"
     b slack/mcp-client-secret              "$HOME/.config/slack/mcp-client-secret"
+    b argocd/mcp-api-token                 "$HOME/.config/argocd/mcp-api-token"
     if ${pkgs.git}/bin/git -C "$HOME/.password-store" rev-parse --git-dir >/dev/null 2>&1; then
       ${pkgs.pass}/bin/pass git push 2>/dev/null && echo "  pushed to remote" || echo "  (push failed - check remote)"
     fi
@@ -2631,6 +2633,14 @@ in
   #   --chrome. It drives the real Chrome through the extension and the native
   #   host claude installs, so the sessions you are signed in to are in reach.
   #   --claude-in-chrome-mcp is an undocumented claude flag and may change.
+  # - kubernetes: containers/kubernetes-mcp-server, read-write (its default),
+  #   on ~/.kube/config with every context reachable (tools take `context`).
+  #   Not in nixpkgs (mcp-k8s-go is a different, smaller server), so npx with
+  #   a pinned version.
+  # - argocd: argoproj-labs/mcp-for-argocd against cd.mistwolf.tech,
+  #   read-write (MCP_READ_ONLY unset). The argocd CLI's own token is an SSO
+  #   session (Authentik, 1 h), so this uses an API token of a local account
+  #   in a 0600 file, with a copy in pass (argocd/mcp-api-token).
   ".config/mcp/mcp.json".text = builtins.toJSON {
     mcpServers = {
       atlassian = {
@@ -2676,6 +2686,20 @@ in
       chrome = {
         command = "${pkgs.claude-code}/bin/claude";
         args = [ "--claude-in-chrome-mcp" ];
+        approveTools = "destructive";
+      };
+      kubernetes = {
+        command = "${pkgs.nodejs_24}/bin/npx";
+        args = [ "-y" "kubernetes-mcp-server@0.0.69" ];
+        approveTools = "destructive";
+      };
+      argocd = {
+        command = "${pkgs.nodejs_24}/bin/npx";
+        args = [ "-y" "argocd-mcp@0.9.0" "stdio" ];
+        env = {
+          ARGOCD_BASE_URL = "https://cd.mistwolf.tech";
+          ARGOCD_API_TOKEN = "!cat \"$HOME/.config/argocd/mcp-api-token\"";
+        };
         approveTools = "destructive";
       };
     };
