@@ -162,7 +162,7 @@ in
     atuin = {
       enable = true;
       enableZshIntegration = true;
-      enableNushellIntegration = false;
+      enableNushellIntegration = true;
       flags = [ "--disable-up-arrow" ];
       settings = {
         auto_sync = true;
@@ -208,13 +208,13 @@ in
     carapace = {
       enable = true;
       enableZshIntegration = true;
-      enableNushellIntegration = false;
+      enableNushellIntegration = true;
     };
 
     starship = {
       enable = true;
       enableZshIntegration = true;
-      enableNushellIntegration = false;
+      enableNushellIntegration = true;
       settings = {
         add_newline = false;
         format = "$directory$character";
@@ -1127,20 +1127,24 @@ in
     zoxide = {
       enable = true;
       enableZshIntegration = true;
-      enableNushellIntegration = false;
+      enableNushellIntegration = true;
     };
 
     direnv = {
       enable = true;
       enableZshIntegration = true;
-      enableNushellIntegration = false;
+      enableNushellIntegration = true;
       nix-direnv.enable = true;
     };
 
     nushell = {
-      enable = false; # broken in nixpkgs-unstable (test failure)
+      enable = true;
 
-      inherit shellAliases;
+      # home.shellAliases is merged in too; sesh's `s` uses bash `$(...)`,
+      # which nushell cannot parse, so override it with a subexpression.
+      shellAliases = shellAliases // {
+        s = lib.mkForce "sesh connect (sesh list --icons | fzf --ansi)";
+      };
 
       environmentVariables = {
         EDITOR = "nvim";
@@ -1320,13 +1324,78 @@ in
             cd $arg
             ls -l
         }
+
+        # argo CLI against mistwolf-dev, same behaviour as the zsh argo()
+        # function: a cached 1 h argo-cli token, reused for 55 min.
+        @complete external
+        def --wrapped argo [...args] {
+            if ($env.ARGO_SERVER? | is-not-empty) or ($args | is-empty) or ($args.0 in ["version" "completion" "help" "-h" "--help"]) {
+                ^argo ...$args
+                return
+            }
+            let cache = ($env.XDG_CACHE_HOME? | default ($env.HOME | path join ".cache") | path join "argo-cli" "token")
+            match $args.0 {
+                "logout" => { rm -f $cache; print -e "argo: token dropped"; return }
+                "login" => { rm -f $cache }
+                _ => {}
+            }
+            let fresh = ($cache | path exists) and ((ls $cache).0.modified > ((date now) - 55min))
+            if not $fresh {
+                let r = (do { ^kubectl --context mistwolf-dev -n argo-workflows create token argo-cli --duration=1h } | complete)
+                if $r.exit_code != 0 {
+                    error make --unspanned { msg: "argo: could not mint an argo-cli token (kubectl context mistwolf-dev)" }
+                }
+                ^mkdir -p -m 700 ($cache | path dirname)
+                $r.stdout | str trim | ^sh -c 'umask 077 && cat > "$1"' sh $cache
+            }
+            if $args.0 == "login" {
+                let until = ((ls $cache).0.modified + 1hr | format date "%H:%M")
+                print -e $"argo: argo-cli token valid until ($until)"
+                return
+            }
+            with-env {
+                ARGO_SERVER: "workflows-cli.tailc90e09.ts.net:443"
+                ARGO_HTTP1: "true"
+                ARGO_SECURE: "true"
+                ARGO_NAMESPACE: ($env.ARGO_NAMESPACE? | default "argo-workflows")
+                ARGO_TOKEN: $"Bearer (open --raw $cache | str trim)"
+            } {
+                # `argo list` without its own -o/--output returns a nushell
+                # table (filterable: `argo list | where status == Failed`).
+                let has_output = ($args | any {|a| $a =~ '^(-o|--output)' })
+                if $args.0 == "list" and not $has_output {
+                    argo-list-table (^argo ...$args -o json)
+                } else {
+                    ^argo ...$args
+                }
+            }
+        }
+
+        def argo-list-table [raw: string] {
+            if not ($raw | str trim | str starts-with "[") { return [] }
+            let rows = ($raw | from json | each {|w|
+                let started = ($w.status.startedAt? | default $w.metadata.creationTimestamp | into datetime)
+                let finished = ($w.status.finishedAt? | if $in == null { null } else { $in | into datetime })
+                {
+                    name: $w.metadata.name
+                    namespace: $w.metadata.namespace
+                    status: ($w.status.phase? | default "Pending")
+                    started: $started
+                    duration: (((($finished | default (date now)) - $started) / 1sec | math floor) * 1sec)
+                    progress: ($w.status.progress? | default "")
+                    message: ($w.status.message? | default "")
+                }
+            })
+            # Like argo's own table: namespace only matters with -A.
+            if ($rows | get namespace | uniq | length) > 1 { $rows } else { $rows | reject namespace }
+        }
       '';
     };
 
     eza = {
       enable = true;
       enableZshIntegration = true;
-      enableNushellIntegration = false;
+      enableNushellIntegration = false; # keep nushell built-in structured ls
       icons = "auto";
       git = true;
     };
