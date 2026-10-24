@@ -23,8 +23,10 @@ hooks.
 | `wja` | Start a task from a Jira key → fresh branch + worktree + prompt | `modules/shared/files.nix` (`.local/bin/wja`) |
 | `pr-review` | Open the `review` layout for a PR (checks out the PR head) | `modules/shared/files.nix` (`.local/bin/pr-review`) |
 | `agent-review-post` | Collect reviewer files and post them to the PR (with preview) | `modules/shared/files.nix` (`.local/bin/agent-review-post`) |
-| `pi-agent-pane` | One pane per pi sub-agent: live transcript + workmux status | `modules/shared/files.nix` (`.local/bin/pi-agent-pane`) |
-| `subagents-workmux.ts` | pi extension: publishes sub-agent lifecycle for workmux | `modules/shared/files.nix` (`.pi/agent/extensions/`) |
+| `pi-agent-pane` | One pane per pi sub-agent (`<type>` in the review layout, `--id <id>` for every other one): live transcript + workmux status | `modules/shared/files.nix` (`.local/bin/pi-agent-pane`) |
+| `subagents-workmux.ts` | pi extension: publishes sub-agent lifecycle for workmux and opens a pane per sub-agent | `modules/shared/files.nix` (`.pi/agent/extensions/`) |
+| `scout`, `worker` | Cheap general-purpose pi sub-agents (Haiku read-only search, Sonnet well-specified edits) | `modules/shared/files.nix` (`.pi/agent/agents/`) |
+| pi `AGENTS.md` | Global pi context: when to delegate, which model ids to use | `modules/shared/files.nix` (`.pi/agent/AGENTS.md`) |
 | `agent-pr-comment` | Post one signed comment to the PR for the current branch | `modules/shared/files.nix` (`.local/bin/agent-pr-comment`) |
 | `codeberg-tasks` | Import Codeberg (Forgejo) issues into taskwarrior | `modules/shared/codeberg-tasks.py` |
 
@@ -45,6 +47,17 @@ hooks.
   Both are defined in `modules/shared/files.nix` (`piReviewer`), land in
   `~/.pi/agent/agents/`, run `isolated` (built-in tools only, no MCP or skills)
   and write `.workmux/review-<model>.md`.
+- General-purpose sub-agents for any pi session, all on the Claude subscription
+  (`claude-bridge/...`, isolated):
+  - `scout` — `claude-haiku-4-5`, thinking off, read-only tools, at most 20 turns.
+    Searching and reading: where is X defined, which files mention Y.
+  - `worker` — `claude-sonnet-5-5`, thinking low, with `edit` and `write`.
+    A well-specified change: edits, docs, mechanical refactors, running checks.
+
+  `~/.pi/agent/AGENTS.md` tells every pi session to delegate to them, so the main
+  (Opus) context stays small, and to override a model only with a full
+  `claude-bridge/<id>`. A bare name such as `sonnet` resolves to the pay-per-use
+  `anthropic` provider, and ChatGPT login rejects the OpenAI mini models.
 
 Each CLI has workmux status hooks installed (`~/.claude/settings.json`,
 `~/.codex/hooks.json`, `~/.pi/agent/extensions/workmux-status.ts`) so it
@@ -53,11 +66,25 @@ reports 🤖 working / 💬 waiting / ✅ done to the workmux dashboard and side
 pi's sub-agents live inside the pi process, which workmux cannot see. The
 `subagents-workmux.ts` extension bridges them: it keeps pi itself at 🤖 while
 background sub-agents run (the `suba:activity` count that `workmux-status.ts`
-reads), and writes each sub-agent's state to `.workmux/agents/<type>.json`.
-`pi-agent-pane <type>` follows that file: once pi starts the sub-agent, the
-pane registers with workmux (its own sidebar/dashboard entry), mirrors the
-status and prints the transcript. A reviewer pi never starts stays an idle
-pane and never shows up in the sidebar.
+reads), and writes each sub-agent's state to `.workmux/agents/<type>.json` and,
+with the same payload plus `type`, to `.workmux/agents/by-id/<id>.json`.
+`pi-agent-pane` follows one of them: once pi starts the sub-agent, the pane
+registers with workmux (its own sidebar/dashboard entry), mirrors the status and
+prints the transcript.
+
+- `pi-agent-pane <type>` is what the `review` layout pre-creates for each
+  reviewer. It claims the type with `.workmux/agents/<type>.pane` (its pid). A
+  reviewer pi never starts stays an idle pane and never shows up in the sidebar.
+- Every other sub-agent (Explore, general-purpose, `scout`, `worker`, ...) gets a
+  pane when it starts: the extension runs `pi-agent-pane --id <id>`, the first one
+  as a 40% column split off pi's pane, later ones stacked below the previous one.
+  The pane is named after the sub-agent type and registers at once. After the run
+  ends it stays `PI_AGENT_PANE_LINGER` seconds (default 120) so the ✅ is visible,
+  then closes and workmux drops it.
+
+No dynamic pane is opened outside tmux, when pi has no UI (`pi -p`, e.g.
+`dw-review --quick`), when `PI_AGENT_PANES=0`, or when a live layout pane already
+claims that type.
 
 ## The flow
 

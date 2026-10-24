@@ -1831,15 +1831,80 @@ in
     maxTurns = 15;
   };
 
+  # Cheap general-purpose subagents, on the Claude subscription. Always a full
+  # claude-bridge/<id>: a bare "sonnet" resolves to the pay-per-use anthropic provider,
+  # and ChatGPT OAuth rejects the mini OpenAI models.
+  ".pi/agent/agents/scout.md".text = ''
+    ---
+    description: Fast read-only search: find files, grep symbols, answer where X is defined; returns paths and short excerpts
+    model: claude-bridge/claude-haiku-4-5
+    thinking: off
+    tools: read, bash, grep, find, ls
+    isolated: true
+    max_turns: 20
+    ---
+    You search a codebase and report what you find. You are read-only: never edit,
+    create, delete or move a file, and never run a command that changes state.
+
+    Answer the question in the task, nothing more. Report each hit as file:line with a
+    short excerpt. Be concise: no preamble, no recap of the task.
+  '';
+  ".pi/agent/agents/worker.md".text = ''
+    ---
+    description: Implements a well-specified change: edits, docs, mechanical refactors, running checks
+    model: claude-bridge/claude-sonnet-5-5
+    thinking: low
+    tools: read, bash, grep, find, ls, edit, write
+    isolated: true
+    ---
+    You implement one well-specified change. Do exactly the task, and touch only the
+    paths it names. Do not commit, push or post anything to a forge unless the task
+    says so. Match the style of the surrounding code.
+
+    End with a short report: what changed (files) and what you verified (commands and
+    their result).
+  '';
+
+  # Global context for every pi session: keeps the main (Opus) session cheap by
+  # pushing search and well-specified edits down to the subagents above.
+  ".pi/agent/AGENTS.md".text = ''
+    # Delegation
+
+    Keep the main context and its cost low by delegating:
+
+    - `scout` for searching and reading (find files, grep symbols, where is X defined).
+    - `worker` for well-specified edits, docs and running checks.
+    - Keep design decisions, integration and the final verification in the main session.
+    - Launch independent subagents in parallel.
+
+    # Models
+
+    When you override a subagent's model, always give a full `claude-bridge/<id>` id.
+    Never a bare name such as "sonnet" or "haiku": it resolves to the paid `anthropic`
+    provider. Bridge models: `claude-haiku-4-5`, `claude-sonnet-5-5`, `claude-opus-5-5`.
+    OpenAI via ChatGPT accepts only the top tiers (`gpt-6-*`), not the mini models.
+
+    # Panes
+
+    Every subagent gets its own tmux pane and workmux sidebar entry automatically
+    (subagents-workmux.ts). Set `PI_AGENT_PANES=0` to turn that off.
+  '';
+
   # pi-subagents run inside the pi process, so workmux (which tracks panes) never
   # sees them. This bridges them out:
   # - `suba:activity` is what workmux-status.ts (from `workmux setup`) counts to keep
   #   pi at working while background agents run. pi-subagents does not emit it, so
   #   without this pi showed done while its reviewers were still going.
-  # - .workmux/agents/<type>.json is what pi-agent-pane (below) follows to give each
-  #   subagent its own pane, sidebar entry and status.
+  # - .workmux/agents/<type>.json is what the layout's `pi-agent-pane <type>` follows
+  #   (the review layout pre-creates one per reviewer).
+  # - .workmux/agents/by-id/<id>.json carries the same payload plus the type. Every
+  #   other subagent, in any pi session inside tmux, gets a pane of its own that
+  #   follows it (`pi-agent-pane --id`), opened here on start. No pane when: there is
+  #   no tmux, pi has no UI (`pi -p`, e.g. dw-review --quick), PI_AGENT_PANES=0, or a
+  #   layout pane already follows that type (its pid in .workmux/agents/<type>.pane).
   ".pi/agent/extensions/subagents-workmux.ts".text = ''
-    import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+    import { execFileSync } from "node:child_process";
+    import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
     import { join } from "node:path";
     import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -1848,27 +1913,76 @@ in
     export default function (pi: ExtensionAPI) {
       const running = new Set<string>();
       let cwd: string | undefined;
+      let hasUI = false;
+      // Most recent dynamic pane; the next one is split off it, so they stack.
+      let lastPane: string | undefined;
 
       const publish = () => pi.events.emit("suba:activity", { activeCount: running.size });
 
+      function write(file: string, payload: object) {
+        writeFileSync(`''${file}.tmp`, JSON.stringify(payload));
+        renameSync(`''${file}.tmp`, file);
+      }
+
       function record(data: Lifecycle, status: string) {
         if (!cwd || typeof data.id !== "string" || typeof data.type !== "string") return;
-        if (!/^[\w.-]+$/.test(data.type)) return;
+        if (!/^[\w.-]+$/.test(data.type) || !/^[\w.-]+$/.test(data.id)) return;
         const manager = (globalThis as any)[Symbol.for("pi-subagents:manager")];
         const rec = manager?.getRecord?.(data.id);
+        const payload = {
+          id: data.id,
+          status,
+          outputFile: rec?.outputFile,
+          updated: Date.now(),
+        };
         try {
           const dir = join(cwd, ".workmux", "agents");
-          mkdirSync(dir, { recursive: true });
-          const file = join(dir, `''${data.type}.json`);
-          writeFileSync(`''${file}.tmp`, JSON.stringify({
-            id: data.id,
-            status,
-            outputFile: rec?.outputFile,
-            updated: Date.now(),
-          }));
-          renameSync(`''${file}.tmp`, file);
+          mkdirSync(join(dir, "by-id"), { recursive: true });
+          write(join(dir, `''${data.type}.json`), payload);
+          write(join(dir, "by-id", `''${data.id}.json`), { ...payload, type: data.type });
         } catch {
           // A read-only or vanished worktree must not break the session.
+        }
+      }
+
+      // A layout pane (`pi-agent-pane <type>`) is alive while its claim file holds a live pid.
+      function claimed(type: string): boolean {
+        try {
+          const pid = parseInt(readFileSync(join(cwd!, ".workmux", "agents", `''${type}.pane`), "utf8"), 10);
+          if (!pid) return false;
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function tmux(...args: string[]): string {
+        return execFileSync("tmux", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      }
+
+      function openPane(data: Lifecycle) {
+        const origin = process.env.TMUX_PANE;
+        if (!origin || !hasUI || !cwd || process.env.PI_AGENT_PANES === "0") return;
+        if (typeof data.id !== "string" || typeof data.type !== "string") return;
+        if (!/^[\w.-]+$/.test(data.id) || !/^[\w.-]+$/.test(data.type)) return;
+        if (claimed(data.type)) return;
+        try {
+          let below: string | undefined;
+          if (lastPane) {
+            try {
+              below = tmux("display", "-p", "-t", lastPane, "#{pane_id}");
+            } catch {
+              // The previous pane has closed; start a new column instead.
+            }
+          }
+          const place = below ? ["-v", "-t", below] : ["-h", "-l", "40%", "-t", origin];
+          lastPane = tmux(
+            "split-window", "-d", ...place, "-P", "-F", "#{pane_id}", "-c", cwd,
+            "pi-agent-pane", "--id", data.id,
+          );
+        } catch {
+          // No tmux server, no room for a split: the subagent still runs.
         }
       }
 
@@ -1879,12 +1993,15 @@ in
           if (active) running.add(d.id);
           else running.delete(d.id);
           record(d, status);
+          if (event === "subagents:started") openPane(d);
           publish();
         });
       }
 
       pi.on("session_start", async (_event, ctx) => {
         cwd = ctx.cwd;
+        hasUI = ctx.hasUI;
+        lastPane = undefined;
         running.clear();
       });
       // workmux-status asks once it has subscribed, in case agents already run.
@@ -1895,27 +2012,49 @@ in
     }
   '';
 
-  # One pane per reviewer in the `review` layout: `pi-agent-pane reviewer-openai`.
-  # Waits for pi to start that subagent, then registers the pane with workmux and
-  # mirrors the agent's status (sidebar, dashboard) and its transcript. It has to be
-  # one long-lived process: workmux forgets an agent whose pane changes its
-  # foreground command.
+  # One pane per subagent. Two modes:
+  # - `pi-agent-pane <type>` (the `review` layout, one per reviewer) waits for pi to
+  #   start that type and follows .workmux/agents/<type>.json. It claims the type
+  #   (.workmux/agents/<type>.pane, its pid) so the extension does not open a second
+  #   pane for the same reviewer.
+  # - `pi-agent-pane --id <id>` (opened by the extension for every other subagent)
+  #   follows .workmux/agents/by-id/<id>.json, is named after its `type`, registers
+  #   at once, and closes PI_AGENT_PANE_LINGER seconds (default 120) after the run
+  #   ends, long enough to see the done mark in the sidebar.
+  # Either way it mirrors the agent's status (sidebar, dashboard) and its transcript.
+  # It has to be one long-lived process: workmux forgets an agent whose pane changes
+  # its foreground command.
   ".local/bin/pi-agent-pane".source = pkgs.lib.getExe (
     pkgs.writers.writePython3Bin "pi-agent-pane" { flakeIgnore = [ "E501" ]; } ''
+      import atexit
       import glob
       import json
       import os
+      import re
+      import signal
       import subprocess
       import sys
       import tempfile
       import time
 
       DIM, BOLD, RED, GREEN, OFF = "\033[2m", "\033[1m", "\033[31m", "\033[32m", "\033[0m"
+      USAGE = "usage: pi-agent-pane <subagent-type> | --id <run-id>"
 
-      agent = sys.argv[1] if len(sys.argv) == 2 else sys.exit("usage: pi-agent-pane <subagent-type>")
+      args = sys.argv[1:]
+      by_id = len(args) == 2 and args[0] == "--id"
+      name = args[-1] if by_id or len(args) == 1 else sys.exit(USAGE)
+      if not re.fullmatch(r"[\w.-]+", name):
+          sys.exit(USAGE)
+      # An --id pane starts in pi's cwd (split-window -c), which is where the extension
+      # writes; a layout pane starts at the worktree root.
       git = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
-      root = git.stdout.strip() or os.getcwd()
-      state_file = os.path.join(root, ".workmux", "agents", f"{agent}.json")
+      root = os.getcwd() if by_id else (git.stdout.strip() or os.getcwd())
+      agents_dir = os.path.join(root, ".workmux", "agents")
+      state_file = os.path.join(agents_dir, "by-id", f"{name}.json") if by_id else os.path.join(agents_dir, f"{name}.json")
+      try:
+          linger = int(os.environ.get("PI_AGENT_PANE_LINGER", "120"))
+      except ValueError:
+          linger = 120
 
 
       def workmux(*args):
@@ -1966,45 +2105,94 @@ in
           sys.stdout.flush()
 
 
-      title(f"{agent} · idle")
-      print(f"{DIM}{agent}: waiting for pi to start it{OFF}", flush=True)
-      registered, current, path, offset, buffer, shown_status = False, None, None, 0, "", None
-      while True:
-          try:
-              with open(state_file) as f:
-                  state = json.load(f)
-          except (OSError, json.JSONDecodeError):
-              state = None
-          if state and state.get("id") != current:
-              current, path, offset, buffer, shown_status = state["id"], None, 0, "", None
-              print(f"\n{BOLD}── {agent} run {current}{OFF}", flush=True)
-              if not registered:
-                  workmux("register-agent")
-                  registered = True
-          if state:
-              path = path or transcript(state, current)
-              if path:
-                  try:
-                      with open(path) as f:
-                          f.seek(offset)
-                          chunk = f.read()
-                          offset = f.tell()
-                  except OSError:
-                      chunk = ""
-                  buffer += chunk
-                  *lines, buffer = buffer.split("\n")
-                  for line in lines:
-                      render(line)
-              status = state.get("status")
-              if status != shown_status:
-                  shown_status = status
-                  workmux("set-window-status", "working" if status == "working" else "done")
-                  title(f"{agent} · {status}")
-                  if status == "done":
-                      print(f"{GREEN}── {agent} done{OFF}", flush=True)
-                  elif status == "failed":
-                      print(f"{RED}── {agent} failed or was stopped{OFF}", flush=True)
-          time.sleep(1)
+      def claim():
+          path = os.path.join(agents_dir, f"{name}.pane")
+          os.makedirs(agents_dir, exist_ok=True)
+          with open(path, "w") as f:
+              f.write(str(os.getpid()))
+
+          def release():
+              try:
+                  with open(path) as f:
+                      mine = f.read().strip() == str(os.getpid())
+                  if mine:
+                      os.remove(path)
+              except OSError:
+                  pass
+
+          def stop(*_):
+              sys.exit(0)
+
+          atexit.register(release)
+          signal.signal(signal.SIGTERM, stop)
+          signal.signal(signal.SIGHUP, stop)
+
+
+      def follow():
+          label = name
+          title(f"{label} · idle")
+          registered, current, path, offset, buffer, shown_status = False, None, None, 0, "", None
+          started, finished = time.time(), None
+          if by_id:
+              print(f"{DIM}{name}: starting{OFF}", flush=True)
+              workmux("register-agent")
+              registered = True
+          else:
+              print(f"{DIM}{name}: waiting for pi to start it{OFF}", flush=True)
+          while True:
+              try:
+                  with open(state_file) as f:
+                      state = json.load(f)
+              except (OSError, json.JSONDecodeError):
+                  state = None
+              if state and by_id and state.get("type"):
+                  label = state["type"]
+              if state and state.get("id") != current:
+                  current, path, offset, buffer, shown_status = state["id"], None, 0, "", None
+                  print(f"\n{BOLD}── {label} run {current}{OFF}", flush=True)
+                  if not registered:
+                      workmux("register-agent")
+                      registered = True
+              if state:
+                  path = path or transcript(state, current)
+                  if path:
+                      try:
+                          with open(path) as f:
+                              f.seek(offset)
+                              chunk = f.read()
+                              offset = f.tell()
+                      except OSError:
+                          chunk = ""
+                      buffer += chunk
+                      *lines, buffer = buffer.split("\n")
+                      for line in lines:
+                          render(line)
+                  status = state.get("status")
+                  if status != shown_status:
+                      shown_status = status
+                      workmux("set-window-status", "working" if status == "working" else "done")
+                      title(f"{label} · {status}")
+                      if status == "done":
+                          print(f"{GREEN}── {label} done{OFF}", flush=True)
+                      elif status == "failed":
+                          print(f"{RED}── {label} failed or was stopped{OFF}", flush=True)
+                      if by_id and status in ("done", "failed"):
+                          finished = time.time()
+                          closes = time.strftime("%H:%M:%S", time.localtime(finished + linger))
+                          print(f"{DIM}pane closes at {closes} (PI_AGENT_PANE_LINGER={linger}s){OFF}", flush=True)
+                      elif status == "working":
+                          finished = None
+              if by_id:
+                  now = time.time()
+                  # A run that never wrote its state would otherwise leave the pane for good.
+                  if finished and now - finished >= linger or not state and now - started >= linger:
+                      return
+              time.sleep(1)
+
+
+      if not by_id:
+          claim()
+      follow()
     ''
   );
 
