@@ -716,9 +716,13 @@ in
     # No global `repos:` list: with one set, sections without their own repo:
     # fan out over just those repos instead of searching the whole instance,
     # which would quietly narrow "All Open".
+    # Every repo is checked out as ~/projects/<repo>, whichever org owns it; the
+    # three below are the exceptions (directory name differs, or outside ~/projects).
     repoPaths:
-      "mistwolftech/*": ~/projects/{{.Repo}}
-      "tomasz-wostal-eu/*": ~/projects/{{.Repo}}
+      "*/*": ~/projects/{{.Repo}}
+      "mistwolftech/amateur-alchemist": ~/projects/amateur_alchemist
+      "tomasz-wostal-eu/n8n-postiz-stack": ~/projects/n8n
+      "tomasz-wostal-eu/nixos-config": ~/nixos-config
     keybindings:
       prs:
         - key: g
