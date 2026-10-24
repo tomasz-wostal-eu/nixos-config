@@ -23,6 +23,9 @@ hooks.
 | `wja` | Start a task from a Jira key → fresh branch + worktree + prompt | `modules/shared/files.nix` (`.local/bin/wja`) |
 | `pr-review` | Open the `review` layout for a PR (checks out the PR head) | `modules/shared/files.nix` (`.local/bin/pr-review`) |
 | `agent-review-post` | Collect reviewer files and post them to the PR (with preview) | `modules/shared/files.nix` (`.local/bin/agent-review-post`) |
+| `pi-ollama-up` | Exit 0 when Ollama answers within 2 s and has the reviewer model; `pr-review` uses it | `modules/shared/files.nix` (`.local/bin/pi-ollama-up`, `ollamaUrl`) |
+| `pr-ci` | CI statuses of a PR's head commit, plus `argo get` of every Argo workflow they link to | `modules/shared/files.nix` (`.local/bin/pr-ci`, `argoHosts`) |
+| `pr-deploy` | Read-only view of what Argo CD and Kargo do with the repo (apps the PR touches, stages, freight) | `modules/shared/files.nix` (`.local/bin/pr-deploy`) |
 | `pi-agent-pane` | One pane per pi sub-agent (`<type>` in the review layout, `--id <id>` for every other one): live transcript + workmux status | `modules/shared/files.nix` (`.local/bin/pi-agent-pane`) |
 | `subagents-workmux.ts` | pi extension: publishes sub-agent lifecycle for workmux and opens a pane per sub-agent | `modules/shared/files.nix` (`.pi/agent/extensions/`) |
 | `scout`, `worker` | Cheap general-purpose pi sub-agents (Haiku read-only search, Sonnet well-specified edits) | `modules/shared/files.nix` (`.pi/agent/agents/`) |
@@ -39,14 +42,16 @@ hooks.
   review; it runs the reviewer sub-agents:
   - `reviewer-openai` — `openai/gpt-6-astra`, thinking high. Always runs.
   - `reviewer-ollama` — `ollama/qwen3-coder:30b-32k` on the LAN box, no
-    thinking, at most 15 turns. Optional: pi asks before running it. 32k of
+    thinking, at most 15 turns. Optional: pi asks before running it, and only
+    when `pi-ollama-up` says the box is reachable. 32k of
     context, so it is only useful for diffs up to roughly 1500 lines. A MoE
     model that fits the box's VRAM; the dense `qwen3.8:27b` did not, and one
     review with it ran past 78 minutes.
 
   Both are defined in `modules/shared/files.nix` (`piReviewer`), land in
   `~/.pi/agent/agents/`, run `isolated` (built-in tools only, no MCP or skills)
-  and write `.workmux/review-<model>.md`.
+  and write `.workmux/review-<model>.md`. The Ollama base URL is one binding,
+  `ollamaUrl`, shared by pi's `models.json` and `pi-ollama-up`.
 - General-purpose sub-agents for any pi session, all on the Claude subscription
   (`claude-bridge/...`, isolated):
   - `scout` — `claude-haiku-4-5`, thinking off, read-only tools, at most 20 turns.
@@ -58,6 +63,10 @@ hooks.
   (Opus) context stays small, and to override a model only with a full
   `claude-bridge/<id>`. A bare name such as `sonnet` resolves to the pay-per-use
   `anthropic` provider, and ChatGPT login rejects the OpenAI mini models.
+
+All agent files have double-quoted frontmatter values. pi-subagents skips an
+agent whose plain `description:` contains `: ` ("Nested mappings are not allowed
+in compact mappings").
 
 Each CLI has workmux status hooks installed (`~/.claude/settings.json`,
 `~/.codex/hooks.json`, `~/.pi/agent/extensions/workmux-status.ts`) so it
@@ -128,14 +137,41 @@ pr-review 42
 `pr-review`:
 - fetches the PR head (`refs/pull/42/head`) and checks it out on a worktree
   branch `review/pr-42`,
+- looks up the PR author and head branch (Codeberg: `tea pulls <n> -o json`,
+  GitHub: `gh pr view`) and puts them in the reviewer task: `review PR #42 (opened
+  by LOGIN from branch HEAD) against base origin/main`. On any other forge or a
+  failed lookup the clause is left out; the review still starts,
+- runs `pi-ollama-up`,
 - opens the `review` layout (pi plus a pane for each reviewer) and hands pi a prompt that makes it:
-  1. show `git diff --stat` and **ask whether to run `reviewer-ollama`** too,
+  1. show `git diff --stat` and **ask whether to run `reviewer-ollama`** too.
+     When Ollama is unreachable pi does not ask: it says so and runs only
+     `reviewer-openai`,
   2. spawn `reviewer-openai` (and `reviewer-ollama` on yes) in the background, in
      parallel,
   3. summarise each verdict and top findings, and point out disagreements.
 - the reviewers stay inside `git diff <base>...HEAD`, do **not** edit / commit /
   push / post anything, and write their review in English to
   `.workmux/review-gpt-6-astra.md` / `.workmux/review-qwen3-coder-30b.md`.
+
+```mermaid
+flowchart TD
+  A[pr-review 42] --> B[fetch refs/pull/42/head]
+  B --> C[author and head branch from tea or gh]
+  C --> D{pi-ollama-up}
+  D -- exit 0 --> E[pi asks: run reviewer-ollama too?]
+  D -- exit 1 --> F[pi says Ollama is unreachable]
+  E --> G[reviewer-openai, reviewer-ollama on yes]
+  F --> H[reviewer-openai only]
+```
+
+**Automated PRs.** The repository's conventions on ticket keys, branch names, PR
+title format and commit footers apply to PRs written by people and coding agents.
+PRs opened by automation (Renovate on `renovate/*`, release tooling with
+`chore(release)`, pipelines that pin images or bump dependencies, a body that says
+it is automated, or whatever the repo's review guidelines list as automation)
+follow the format their automation documents. The reviewers do not report
+missing ticket keys or naming there; they review the change itself. They decide
+from the author and head branch in the task.
 
 Overrides: `scripts/dw-review` / `scripts/met-review`, if present and executable,
 replace `pr-review` **entirely** (they are `exec`'d before the fetch and prompt).
@@ -158,7 +194,94 @@ signed comment. The signature is the model from the file name, e.g.
 `**gpt-6-astra**`. A posted file is renamed `*.md.posted`; a failed post is kept for
 a retry. Posting is deliberately a manual step — it is visible on the forge.
 
-### 4. Leave an ad-hoc signed comment
+### 4. Check CI and deployment
+
+Press **`i`** (CI) or **`D`** (deploy) on a PR in `tea-dash`, or run in the repo:
+
+```sh
+pr-ci 42       # CI of the PR head, Argo workflows behind it
+pr-deploy 42   # Argo CD apps and Kargo stages of this repo
+```
+
+Both open in a new tmux window and wait for enter after you quit. The keys are
+not `c` and `d`: tea-dash 0.3.9 uses those in the PR view (comment, preview
+scroll, external diff), and a custom key shadows the built-in one.
+
+`pr-ci`:
+- reads the head commit's statuses: Codeberg through the Forgejo API with
+  `tea api` (tea's own login, no token in the script), GitHub with
+  `gh pr checks`, and prints context, state and description,
+- runs `argo get` for every distinct `https://<host>/workflows/<namespace>/<name>`
+  a status links to (the Argo Workflows UI),
+- then loops: `r` refresh, `w` `argo watch`, `l` `argo logs` of the failed pods
+  whose node status names the pod, `o` open in the browser, `q` quit. Pod names
+  are never rebuilt from node ids (a single-pod workflow's pod is named like the
+  workflow, and the format varies), so when nothing failed or a failed node has
+  no pod name, `l` shows the logs of the whole workflow and names the failed
+  steps (argo 4.0 has no `--node-field-selector` to narrow it). When `argo logs`
+  returns nothing, the pods are gone (pod GC): in server mode `l` then fetches
+  each Pod node's archived `main-logs` (the failed nodes if any, else all of
+  them, in start order) from
+  `https://<cliServer>/artifact-files/<namespace>/archived-workflows/<uid>/<node-id>/outputs/main-logs`,
+  each under a header with the node's name and phase; a node without one shows
+  `no archived logs for <node>`.
+
+How `pr-ci` reaches Argo is set per UI host in `argoHosts` (`files.nix`). For
+`workflows.mistwolf.tech`: kube context `mistwolf-dev`, argo-cli server
+`workflows-cli.tailc90e09.ts.net`, token for the service account
+`argo-workflows/argo-cli`. The argo-cli server is a second, owner-only
+argo-server in client auth mode on the tailnet, set up in drift-warden (DW-162,
+[docs/argo-cli.md](https://codeberg.org/mistwolftech/drift-warden/src/branch/main/docs/argo-cli.md)).
+The mode is decided once per host and run:
+
+```mermaid
+flowchart TD
+  A[workflow URL on host H] --> B{argo-cli server answers within 3 s?}
+  B -- no --> K[kube mode: argo --context kubeContext]
+  B -- yes --> C{kubectl create token for tokenAccount, 1h}
+  C -- fails --> K
+  C -- token --> S[server mode: ARGO_SERVER=cliServer:443, ARGO_TOKEN in argo's env only]
+  S --> E[live and archived workflows, archived logs]
+  K --> F[live workflows only]
+```
+
+- **Server mode** mints one token per `pr-ci` run (`kubectl --context
+  <kubeContext> -n <ns> create token <sa> --duration=1h`) and reuses it for the
+  whole interactive loop; when argo answers Unauthenticated/401 it mints a new
+  one and retries once. The token lives in a shell variable and reaches argo
+  only through its environment: it is never printed, never on a command line,
+  and nothing in the script runs under `set -x`. A garbage-collected workflow
+  comes from the archive (`argo get` by name). `argo logs` returns nothing
+  once the pods are gone, so `l` fetches the archived logs with `curl`; the
+  token reaches curl as a `header = ...` config line on stdin (`--config -`),
+  not as an argument, so it is not visible in `ps`. Nothing is stored in the
+  Keychain or the Nix store.
+- **Kube mode** is the fallback, with one line on stderr saying why (for example
+  `argo-cli server workflows-cli.tailc90e09.ts.net not reachable, kube mode:
+  archived workflows not visible`). The context is always passed, because the
+  default kube context is a dead local cluster. A workflow that was
+  garbage-collected is shown as its UI URL with a note; finished pods are gone
+  too (pod GC), so `l` says the logs need server mode.
+
+`pr-deploy` (read-only: no sync, no promotion):
+- takes the repo identity from `origin` and lists the Argo CD apps
+  (`argocd app list`, SSO login) whose `source`/`sources[]` `repoURL` is this
+  repo (ssh/https/`.git` normalised) or an OCI chart named like it: a Helm OCI
+  source (`repoURL: registry/org`, `chart: <name>`) by its `chart`, an OCI
+  `repoURL` without a chart by its last segment,
+- with more than 20 such apps (drift-warden has over a hundred) keeps only the
+  ones the PR touches: a source `path` that is a prefix of a changed file, or a
+  helm value file (`$values/...`) that is a changed file. The changed files are
+  `git diff <base>...<head>` against the PR's own base branch (`tea pulls` /
+  `gh pr view`), both fetched with explicit refspecs. It prints "N apps from
+  this repo, M touched by this PR"; when the base lookup, fetch or diff fails it
+  keeps all apps and says why,
+- shows app, sync, health, revision and last operation, OutOfSync/Degraded first,
+- shows the Kargo project named like the repo, if there is one: stages with
+  their current freight, health and phase, and the newest freight,
+- loops: `r` refresh, `a` `argocd app get` of an app by number, `q` quit.
+
+### 5. Leave an ad-hoc signed comment
 
 ```sh
 echo "Looks good, one nit on error handling" | agent-pr-comment claude
@@ -197,6 +320,10 @@ Forge auth and tokens (never stored in the Nix store):
 - Codeberg CLI: `tea login add` (tea-dash reads `tea`'s own login, named
   `codeberg`).
 - GitHub CLI: `gh auth login`.
+- Argo CD and Kargo: `argocd login cd.mistwolf.tech --sso`, `kargo login
+  https://kargo.mistwolf.tech --sso` (used by `pr-deploy`).
+- Argo Workflows: the `mistwolf-dev` kube context. It serves kube mode and mints
+  the server mode token (see `pr-ci` above).
 - Codeberg API token for issue sync: `~/.config/codeberg/token`.
 
 ## Conventions

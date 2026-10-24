@@ -98,6 +98,254 @@ let
     pkgs.lib.mapAttrsToList (tag: query: "+${tag} -- (${query}) and not tag:${tag}\n") notmuchTagRules
   );
 
+  # Ollama on the LAN box: pi's provider (models.json) and the pi-ollama-up probe
+  # both come from here. The reviewer model is the one pr-review needs to be there.
+  ollamaUrl = "http://192.168.1.37:11434";
+  ollamaReviewModel = "qwen3-coder:30b-32k";
+
+  # Argo Workflows UIs that CI statuses link to, and how pr-ci reaches each one:
+  # the kubeconfig context of the cluster it runs in (kube mode), and the owner-only
+  # argo-server in client auth mode on the tailnet (server mode, drift-warden DW-162)
+  # with the <namespace>/<service account> pr-ci mints its token for.
+  argoHosts = {
+    "workflows.mistwolf.tech" = {
+      kubeContext = "mistwolf-dev";
+      cliServer = "workflows-cli.tailc90e09.ts.net";
+      tokenAccount = "argo-workflows/argo-cli";
+    };
+  };
+
+  # One argoHosts field as a bash associative array keyed by host, for pr-ci.
+  argoHostsBash =
+    name: field:
+    "declare -A ${name}=(\n"
+    + pkgs.lib.concatStrings (
+      pkgs.lib.mapAttrsToList (
+        host: a: "  [${pkgs.lib.escapeShellArg host}]=${pkgs.lib.escapeShellArg (a.${field} or "")}\n"
+      ) argoHosts
+    )
+    + ")\n";
+
+  # jq for pr-ci and pr-deploy: `table` pads an array of string rows into columns
+  # (no column(1) needed), `norm` turns any git URL form into host/owner/repo.
+  jqHelpers = ''
+    def table: (.[0] | length) as $n
+      | [range(0; $n) as $i | map(.[$i] | length) | max] as $w
+      | .[] | [range(0; $n) as $i | .[$i] + (" " * ($w[$i] - (.[$i] | length)))]
+      | join("  ") | sub(" +$"; "");
+    def norm: ascii_downcase | sub("^[a-z0-9+.-]+://"; "") | sub("^[^@/]+@"; "")
+      | sub(":[0-9]+/"; "/") | sub(":"; "/") | sub("\\.git/?$"; "") | sub("/+$"; "");
+  '';
+
+  # pr-ci `l`: what to fetch logs of, from `argo get -o json`. One line per failed
+  # Pod node whose status names its pod ("pod<TAB>name"), and "workflow<TAB>names"
+  # when nothing failed or a failed node carries no pod name. Pod names are never
+  # rebuilt from node ids: a single-pod workflow's pod is named like the workflow,
+  # and the format differs between Argo versions and settings.
+  argoLogsJq = ''
+    [.status.nodes // {} | .[] | select(.type == "Pod" and (.phase == "Failed" or .phase == "Error"))] as $failed
+    | ($failed | map(select((.podName // "") != "") | "pod\t\(.podName)") | .[]),
+      ([$failed[] | select((.podName // "") == "") | .displayName // .name]
+        | if length > 0 or ($failed | length) == 0 then "workflow\t\(join(", "))" else empty end)
+  '';
+
+  # pr-ci `l` once the pods are gone: the Pod nodes whose archived main-logs to fetch
+  # from the argo-cli server, as "node id<TAB>displayName<TAB>phase". The failed ones
+  # if any, else all of them, in start order. The node id is the key in status.nodes.
+  argoArchivedLogsJq = ''
+    [.status.nodes // {} | to_entries[] | .value + {id: (.value.id // .key)} | select(.type == "Pod")]
+    | sort_by(.startedAt // "") as $pods
+    | [$pods[] | select(.phase == "Failed" or .phase == "Error")]
+    | (if length > 0 then . else $pods end)[]
+    | "\(.id)\t\(.displayName // .name // .id)\t\(.phase // "-")"
+  '';
+
+  # pr-ci `l`: argo logs appended to $tmp/live. stdout, stderr and the exit status
+  # are kept apart: 0 with output; 1 when the pod is gone (empty successful output,
+  # or a not-found error), so the caller falls back to the archive; 2 with any other
+  # argo error, written to $tmp/live. A bash function on argo_at, also run by the
+  # fixtures against a stub.
+  prCiLiveLogs = ''
+    live_logs() {
+      local host=$1 rc=0
+      shift
+      argo_at "$host" logs "$@" > "$tmp/out" 2> "$tmp/logerr" || rc=$?
+      if [ "$rc" -eq 0 ] && [ -s "$tmp/out" ]; then
+        cat "$tmp/out" >> "$tmp/live"
+      elif [ "$rc" -eq 0 ] || grep -qiE 'not ?found' "$tmp/logerr"; then
+        echo "no logs" >> "$tmp/live"
+        return 1
+      else
+        { echo "argo logs failed (exit $rc):"; cat "$tmp/logerr"; } >> "$tmp/live"
+        return 2
+      fi
+    }
+  '';
+
+  # pr-deploy: sources of an Argo CD app and whether one comes from the repo $id
+  # (host/owner/repo) named $repo. A Helm OCI source is `repoURL: registry/org` plus
+  # `chart: name`, so its chart is compared; an OCI repoURL without a chart matches
+  # when its last segment is the name. A scheme-less repoURL without a chart that is
+  # an SCP-style git URL (user@host:path) or ends in .git is git, not OCI. Value file
+  # paths are resolved against the source path, `.` and `..` included; a `$name/`
+  # value file against the source with `ref: name`, only when that source is this repo.
+  # A source that matches only as OCI has no path to compare: impact unknown, kept.
+  argoAppsJq = jqHelpers + ''
+    def srcs: [.spec.source // empty] + (.spec.sources // []);
+    def ours: (.repoURL // "" | norm) == $id;
+    def oci: (.repoURL // "") as $u | ($u | startswith("oci://"))
+      or (($u | test("://") | not)
+        and ((.chart // "") != "" or ($u | test("^[^/@:]+@[^/:]+:|[.]git/?$") | not)));
+    def normpath: reduce (split("/")[] | select(. != "" and . != ".")) as $s ([];
+        if $s == ".." and length > 0 and last != ".." then .[:-1] else . + [$s] end)
+      | join("/");
+    def oci_name: if (.chart // "") != "" then .chart else (.repoURL // "" | sub("/+$"; "") | split("/") | last) end;
+    def from_repo: ours or (oci and (oci_name | ascii_downcase) == ($repo | ascii_downcase));
+    def vfiles($ss): . as $s | [(.helm.valueFiles // [])[]
+      | if startswith("$") then (capture("^[$](?<n>[^/]+)/(?<p>.*)$") // {}) as $r
+          | if $r.n != null and any($ss[]; .ref == $r.n and ours) then $r.p else empty end
+        elif ($s | ours) and ($s.path // "") != "" then ($s.path | sub("/+$"; "")) + "/" + .
+        else empty end | normpath];
+    def path_hit($files): if ours and (.path // "") != ""
+      then (.path | sub("/+$"; "")) as $p | any($files[]; $p == "." or . == $p or startswith($p + "/"))
+      else false end;
+    def touched($files): srcs as $ss
+      | any($ss[]; path_hit($files) or (vfiles($ss) as $v | any($files[]; . as $f | any($v[]; . == $f))));
+    def impact_unknown: any(srcs[]; from_repo and (ours | not));
+    def short: if test("^[0-9a-f]{40}$") then .[0:7] elif startswith("sha256:") then .[0:19] else . end;
+    # A multi-source app has one revision per source: take the one of this repo.
+    def rev: (if .status.sync.revision then .status.sync.revision
+      else (.status.sync.revisions // []) as $r
+        | [srcs | to_entries[] | select(.value | from_repo) | $r[.key] // empty][0] // $r[0] // "-" end) | short;
+  '';
+
+  # Fixtures for the two jq programs above. pr-ci and pr-deploy depend on this
+  # derivation, so a build fails when one of them stops matching.
+  prToolsFixtures =
+    let
+      json = name: value: pkgs.writeText "${name}.json" (builtins.toJSON value);
+      node = id: attrs: { inherit id; name = id; displayName = id; } // attrs;
+      # A single-pod workflow: the root node is the pod, named like the workflow.
+      singlePod = json "single-pod" {
+        metadata.name = "lint-x7k2p";
+        status.nodes."lint-x7k2p" = node "lint-x7k2p" { type = "Pod"; phase = "Failed"; templateName = "lint"; };
+      };
+      # Steps: one failed pod with a pod name, one without, one that succeeded.
+      multiStep = json "multi-step" {
+        metadata.name = "ci-q9w4z";
+        status.nodes = {
+          "ci-q9w4z" = node "ci-q9w4z" { type = "Steps"; phase = "Failed"; displayName = "ci-q9w4z"; };
+          "ci-q9w4z-111" = node "ci-q9w4z-111" { type = "Pod"; phase = "Succeeded"; displayName = "checkout"; podName = "ci-q9w4z-checkout-111"; };
+          "ci-q9w4z-222" = node "ci-q9w4z-222" { type = "Pod"; phase = "Failed"; displayName = "build"; podName = "ci-q9w4z-build-222"; };
+          "ci-q9w4z-333" = node "ci-q9w4z-333" { type = "Pod"; phase = "Error"; displayName = "test"; };
+        };
+      };
+      succeeded = json "succeeded" {
+        status.nodes."ok-1" = node "ok-1" { type = "Pod"; phase = "Succeeded"; podName = "ok-1"; };
+      };
+      # Archived: no pod names, one node without an id field (the key is the id).
+      archived = json "archived" {
+        metadata.uid = "0f2e";
+        status.nodes = {
+          "ar-1" = node "ar-1" { type = "DAG"; phase = "Succeeded"; };
+          "ar-1-20" = node "ar-1-20" { type = "Pod"; phase = "Succeeded"; displayName = "lint"; startedAt = "2026-10-01T10:00:02Z"; };
+          "ar-1-10" = { type = "Pod"; phase = "Succeeded"; displayName = "checkout"; startedAt = "2026-10-01T10:00:01Z"; };
+        };
+      };
+      apps = json "apps" [
+        { metadata.name = "git"; spec.source = { repoURL = "ssh://git@codeberg.org/mistwolftech/drift-warden.git"; path = "charts/x"; }; }
+        { metadata.name = "helm-oci"; spec.source = { repoURL = "ghcr.io/mistwolftech"; chart = "drift-warden"; }; }
+        { metadata.name = "oci-url"; spec.sources = [ { repoURL = "oci://ghcr.io/mistwolftech/drift-warden"; } ]; }
+        { metadata.name = "other-chart"; spec.source = { repoURL = "ghcr.io/drift-warden"; chart = "other"; }; }
+        { metadata.name = "other-git"; spec.source = { repoURL = "https://codeberg.org/mistwolftech/other.git"; path = "."; }; }
+        { metadata.name = "scp-git"; spec.source = { repoURL = "git@codeberg.org:mistwolftech/drift-warden.git"; path = "."; }; }
+        # Same basename, other owner and host, SCP-style without .git: git, not OCI.
+        { metadata.name = "other-scp"; spec.source = { repoURL = "git@github.com:other-owner/drift-warden"; path = "."; }; }
+      ];
+      # Value files outside the chart directory, relative and through a $ref.
+      valuesApps = json "values-apps" [
+        {
+          metadata.name = "up";
+          spec.source = {
+            repoURL = "https://codeberg.org/mistwolftech/drift-warden.git";
+            path = "charts/example";
+            helm.valueFiles = [ "../../values/prod.yaml" "./values-extra.yaml" ];
+          };
+        }
+        {
+          metadata.name = "ref";
+          spec.sources = [
+            { repoURL = "ghcr.io/mistwolftech"; chart = "other"; helm.valueFiles = [ "$values/charts/../values/qa.yaml" ]; }
+            { repoURL = "https://codeberg.org/mistwolftech/drift-warden.git"; ref = "values"; }
+          ];
+        }
+        # Same value file through a ref to another repo: not this repo's file.
+        {
+          metadata.name = "other-ref";
+          spec.sources = [
+            { repoURL = "ghcr.io/mistwolftech"; chart = "other"; helm.valueFiles = [ "$values/values/qa.yaml" ]; }
+            { repoURL = "https://github.com/other/config.git"; ref = "values"; }
+          ];
+        }
+      ];
+      # More than 20 consumers of this repo's OCI chart: none has a path to compare.
+      ociApps = json "oci-apps" (builtins.genList (i: {
+        metadata.name = "oci-${toString i}";
+        spec.source = { repoURL = "ghcr.io/mistwolftech"; chart = "drift-warden"; targetRevision = "1.0.0"; };
+      }) 21);
+    in
+    pkgs.runCommand "pr-tools-fixtures" { nativeBuildInputs = [ pkgs.jq ]; } ''
+      check() {
+        if [ "$2" != "$3" ]; then
+          printf '%s\n  want: %q\n  got:  %q\n' "$1" "$3" "$2" >&2
+          exit 1
+        fi
+      }
+      logs=${pkgs.lib.escapeShellArg argoLogsJq}
+      check single-pod "$(jq -r "$logs" ${singlePod})" "$(printf 'workflow\tlint-x7k2p')"
+      check multi-step "$(jq -r "$logs" ${multiStep})" "$(printf 'pod\tci-q9w4z-build-222\nworkflow\ttest')"
+      check succeeded "$(jq -r "$logs" ${succeeded})" "$(printf 'workflow\t')"
+      archived_logs=${pkgs.lib.escapeShellArg argoArchivedLogsJq}
+      check archived-failed "$(jq -r "$archived_logs" ${multiStep})" \
+        "$(printf 'ci-q9w4z-222\tbuild\tFailed\nci-q9w4z-333\ttest\tError')"
+      check archived-all "$(jq -r "$archived_logs" ${archived})" \
+        "$(printf 'ar-1-10\tcheckout\tSucceeded\nar-1-20\tlint\tSucceeded')"
+      check oci-match "$(jq -r --arg id codeberg.org/mistwolftech/drift-warden --arg repo drift-warden \
+        ${pkgs.lib.escapeShellArg argoAppsJq}' [.[] | select(any(srcs[]; from_repo)) | .metadata.name] | join(" ")' ${apps})" \
+        "git helm-oci oci-url scp-git"
+      apps_defs=${pkgs.lib.escapeShellArg argoAppsJq}
+      touched() {
+        jq -r --arg id codeberg.org/mistwolftech/drift-warden --arg repo drift-warden --argjson files "$1" \
+          "$apps_defs"' [.[] | select(touched($files)) | .metadata.name] | join(" ")' ${valuesApps}
+      }
+      check values-up "$(touched '["values/prod.yaml"]')" up
+      check values-dot "$(touched '["charts/example/values-extra.yaml"]')" up
+      check values-ref "$(touched '["values/qa.yaml"]')" ref
+      check values-none "$(touched '["charts/values/prod.yaml"]')" ""
+      check oci-kept "$(jq -r --arg id codeberg.org/mistwolftech/drift-warden --arg repo drift-warden \
+        "$apps_defs"' [.[] | select(touched(["charts/drift-warden/Chart.yaml"]) or impact_unknown)] | length' ${ociApps})" 21
+
+      # live_logs against a stub argo: output, exit status and stderr per case.
+      tmp=$(mktemp -d)
+      argo_at() { shift; argo "$@"; }
+      argo() { printf '%s' "$stub_out"; printf '%s' "$stub_err" >&2; return "$stub_rc"; }
+      ${prCiLiveLogs}
+      live() {
+        stub_out=$1 stub_err=$2 stub_rc=$3
+        : > "$tmp/live"
+        rc=0
+        live_logs host wf -n ns || rc=$?
+        printf '%s|%s' "$rc" "$(cat "$tmp/live")"
+      }
+      check live-ok "$(live 'line 1' "" 0)" "0|line 1"
+      check live-empty "$(live "" "" 0)" "1|no logs"
+      # argo 4.0.5 on a garbage-collected pod: exit 1, nothing on stdout.
+      check live-missing-pod "$(live "" 'level=fatal msg="pods \"wf-main-1\" not found"' 1)" "1|no logs"
+      check live-error "$(live "" 'rpc error: code = Unavailable' 1)" \
+        "$(printf '2|argo logs failed (exit 1):\nrpc error: code = Unavailable')"
+      touch $out
+    '';
+
   # (An xterm-256 approximation table used to live here for neomutt. It was
   # dropped: the 256-cube nearest neighbours are visibly off — notably base
   # #24273a landing on the neutral grey color235 — which left a seam between the
@@ -107,7 +355,8 @@ let
   # pi-subagents reviewer for the PR flow (see pr-review). `label` names the review
   # file, and agent-review-post signs the PR comment with it, so the forge shows
   # which model wrote what. `isolated` keeps MCP and skills out of the prompt —
-  # the Ollama models have 32k of context and nothing to spare.
+  # the Ollama models have 32k of context and nothing to spare. Frontmatter values are
+  # double-quoted: pi-subagents drops an agent whose plain value contains ": ".
   piReviewer =
     {
       model,
@@ -117,7 +366,7 @@ let
     }:
     ''
       ---
-      description: Reviews one PR diff read-only and writes .workmux/review-${label}.md
+      description: "Reviews one PR diff read-only and writes .workmux/review-${label}.md"
       model: ${model}
       thinking: ${thinking}
       tools: read, bash, grep, find, ls, write
@@ -131,12 +380,43 @@ let
       sources or build the whole project. Look for correctness bugs first, then anything
       that would break on a clean machine.
 
+      The repository's conventions on ticket keys, branch names, PR title format and
+      commit footers apply to PRs written by people and coding agents. PRs opened by
+      automation follow the format their automation documents: Renovate (branch
+      renovate/*), release tooling (chore(release)), pipelines that pin images or bump
+      dependencies, anything whose body says it is automated, and anything the
+      repository's review guidelines list as automation. Do not report missing ticket
+      keys or naming there; review the change itself as usual. The task names the PR
+      author and head branch when they are known: use them to decide.
+
       Do not edit tracked files, commit, push or post anything to the forge. The only
       file you create is `.workmux/review-${label}.md` at the worktree root: the review in
       English, findings ordered by severity, each naming file:line, why it matters and
       what you would change, ending with one line: approve, or request changes. Write it
       before you finish, then reply with the same review.
     '';
+
+  # .local/bin/pi-ollama-up. Exits 0 when Ollama answers within 2 s and has the reviewer model, 1 with one
+  # line on stderr otherwise. pr-review uses it to leave reviewer-ollama out.
+  piOllamaUp = pkgs.writeShellApplication {
+    name = "pi-ollama-up";
+    runtimeInputs = [
+      pkgs.curl
+      pkgs.jq
+    ];
+    text = ''
+      url=${pkgs.lib.escapeShellArg ollamaUrl}
+      model=${pkgs.lib.escapeShellArg ollamaReviewModel}
+      if ! tags=$(curl -fsS --max-time 2 "$url/api/tags" 2> /dev/null); then
+        echo "pi-ollama-up: Ollama at $url does not answer" >&2
+        exit 1
+      fi
+      if ! jq -e --arg m "$model" 'any(.models[]?; .name == $m)' <<< "$tags" > /dev/null 2>&1; then
+        echo "pi-ollama-up: Ollama at $url has no $model" >&2
+        exit 1
+      fi
+    '';
+  };
 
   # Signs an agent comment on a PR; used by the helper scripts below too.
   agentPrComment =
@@ -757,6 +1037,9 @@ in
       "mistwolftech/amateur-alchemist": ~/projects/amateur_alchemist
       "tomasz-wostal-eu/n8n-postiz-stack": ~/projects/n8n
       "tomasz-wostal-eu/nixos-config": ~/nixos-config
+    # Custom keys are matched before tea-dash's own, so a custom one shadows the
+    # default: that is why CI is `i` and deploy `D`, not `c` (comment) and `d`
+    # (preview scroll, external diff).
     keybindings:
       prs:
         - key: g
@@ -776,6 +1059,18 @@ in
           command: >-
             tmux new-window '
               cd {{.RepoPath}} && agent-review-post "$(workmux path pr-{{.PrNumber}})"; printf "press enter "; read x
+            '
+        - key: i
+          name: CI of the PR head (pr-ci)
+          command: >-
+            tmux new-window '
+              cd {{.RepoPath}} && pr-ci {{.PrNumber}}; printf "press enter "; read x
+            '
+        - key: D
+          name: Argo CD and Kargo state (pr-deploy)
+          command: >-
+            tmux new-window '
+              cd {{.RepoPath}} && pr-deploy {{.PrNumber}}; printf "press enter "; read x
             '
         - key: C
           name: claude review
@@ -1555,16 +1850,27 @@ in
     }
   );
 
+  # Is the Ollama reviewer usable right now? Silent on success (piOllamaUp above).
+  ".local/bin/pi-ollama-up".source = pkgs.lib.getExe piOllamaUp;
+
   # Starts the review layout for a PR of the repo in the current directory:
   # `pr-review 42`. A repo with its own flow (scripts/dw-review, scripts/met-review)
   # keeps it; any other repo gets a worktree review/pr-<n> on the PR head with the
   # `review` layout: pi as the orchestrator, which runs the reviewer subagents
   # (.pi/agent/agents/reviewer-*.md below). Each writes .workmux/review-<model>.md,
-  # which agent-review-post posts.
+  # which agent-review-post posts. The reviewers get the PR author and head branch, so
+  # they can tell an automated PR (Renovate, release tooling) from a human one; when
+  # Ollama is down, pi is not asked about reviewer-ollama at all.
   ".local/bin/pr-review".source = pkgs.lib.getExe (
     pkgs.writeShellApplication {
       name = "pr-review";
-      runtimeInputs = [ pkgs.git ];
+      runtimeInputs = [
+        pkgs.git
+        pkgs.tea
+        pkgs.gh
+        pkgs.jq
+        piOllamaUp
+      ];
       text = ''
         if ! [[ ''${1:-} =~ ^[0-9]+$ ]]; then
           echo "usage: pr-review <pr-number>" >&2
@@ -1582,11 +1888,36 @@ in
         sha=$(git rev-parse FETCH_HEAD)
         base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null || echo origin/main)
 
+        # Who opened the PR and from which branch. Best effort: any failure just
+        # leaves the clause out of the reviewer task.
+        meta=""
+        case $(git remote get-url origin 2> /dev/null || true) in
+          *codeberg.org*)
+            meta=$(tea pulls "$pr" -o json 2> /dev/null | jq -r '"\(.user // "") \(.head // "")"' 2> /dev/null || true)
+            ;;
+          *github.com*)
+            meta=$(gh pr view "$pr" --json headRefName,author -q '"\(.author.login // "") \(.headRefName // "")"' 2> /dev/null || true)
+            ;;
+        esac
+        by=""
+        read -r login head <<< "$meta" || true
+        if [ -n "''${login:-}" ] && [ -n "''${head:-}" ]; then
+          by=" (opened by $login from branch $head)"
+        fi
+        task="review PR #$pr$by against base $base"
+
+        if pi-ollama-up; then
+          steps="1. Run \`git diff --stat $base...HEAD\` and show me the size of the change. Then ask me whether to run the second reviewer, reviewer-ollama (a local model with 32k of context: a diff of more than about 1500 lines will not fit). Wait for my answer.
+        2. Spawn reviewer-openai, and reviewer-ollama only if I said yes, in the background and in parallel. Give each the task: $task."
+        else
+          steps="1. Tell me that Ollama is unreachable, so reviewer-ollama does not run this time. Run \`git diff --stat $base...HEAD\` and show me the size of the change.
+        2. Spawn reviewer-openai in the background. Give it the task: $task. Do not spawn reviewer-ollama."
+        fi
+
         prompt="You orchestrate the review of pull request #$pr. The PR head is checked out here on branch review/pr-$pr; its base is $base. You do not review it yourself: the reviewer subagents do.
 
-        1. Run \`git diff --stat $base...HEAD\` and show me the size of the change. Then ask me whether to run the second reviewer, reviewer-ollama (a local model with 32k of context: a diff of more than about 1500 lines will not fit). Wait for my answer.
-        2. Spawn reviewer-openai, and reviewer-ollama only if I said yes, in the background and in parallel. Give each the task: review PR #$pr against base $base.
-        3. When they finish, check that each wrote its .workmux/review-*.md file, and give me a short summary: the verdict and the top findings of each. Point out where they disagree.
+        $steps
+        3. When the reviewers you spawned finish, check that each wrote its .workmux/review-*.md file, and give me a short summary: the verdict and the top findings of each. Point out where they disagree.
 
         Do not edit tracked files, commit, push or post anything to the forge. I post the reviews myself with agent-review-post."
 
@@ -1645,6 +1976,467 @@ in
           else
             echo "posting $agent failed; $f kept for a retry" >&2
           fi
+        done
+      '';
+    }
+  );
+
+  # CI of a PR's head commit, from a repo checkout: `pr-ci 42`. Codeberg statuses come
+  # from the Forgejo API (tea api, tea's own login), GitHub's from `gh pr checks`.
+  # Every Argo Workflows run a status links to gets an `argo get`. Access per host is
+  # argoHosts above. Server mode, when the argo-cli server answers and a token mints:
+  # one short-lived service account token per run (kubectl create token), held in a
+  # shell variable and passed only in argo's environment, never on a command line or
+  # the screen; it also sees archived workflows and their logs. Otherwise kube mode,
+  # with the host's kube context always passed explicitly, because the default
+  # context is a dead local cluster.
+  ".local/bin/pr-ci".source = pkgs.lib.getExe (
+    pkgs.writeShellApplication {
+      name = "pr-ci";
+      # The jq programs are single-quoted on purpose: their $names are jq's.
+      excludeShellChecks = [ "SC2016" ];
+      runtimeInputs = [
+        pkgs.git
+        pkgs.tea
+        pkgs.gh
+        pkgs.jq
+        pkgs.gnugrep
+        pkgs.coreutils
+        pkgs.curl
+        pkgs.kubectl
+        pkgs.argo-workflows
+      ];
+      derivationArgs.fixtures = prToolsFixtures;
+      text = ''
+        if ! [[ ''${1:-} =~ ^[0-9]+$ ]]; then
+          echo "usage: pr-ci <pr-number>  (in a checkout of the PR's repo)" >&2
+          exit 2
+        fi
+        pr=$1
+        remote=$(git remote get-url origin)
+        defs=${pkgs.lib.escapeShellArg jqHelpers}
+
+        ${argoHostsBash "kube_context" "kubeContext"}
+        ${argoHostsBash "cli_server" "cliServer"}
+        ${argoHostsBash "token_account" "tokenAccount"}
+        declare -A argo_mode=() argo_token=()
+
+        # argo output goes through files, not $(...): a token re-minted in a
+        # subshell would be lost to the rest of the run.
+        tmp=$(mktemp -d)
+        trap 'rm -rf "$tmp"' EXIT
+
+        # A one-hour token for the argo-cli service account, kept in argo_token only.
+        mint_token() {
+          local acct=''${token_account[$1]:-}
+          [ -n "$acct" ] || return 1
+          argo_token[$1]=$(kubectl --context "''${kube_context[$1]:-}" -n "''${acct%%/*}" create token "''${acct#*/}" --duration=1h 2> /dev/null) || return 1
+          [ -n "''${argo_token[$1]}" ]
+        }
+
+        # Server mode when the host's argo-cli server answers within 3 s and a token
+        # mints, else kube mode with one line on why. Decided once per host and run.
+        server_mode() {
+          local host=$1 server=''${cli_server[$1]:-}
+          if [ -z "''${argo_mode[$host]:-}" ]; then
+            argo_mode[$host]=kube
+            if [ -z "$server" ]; then
+              :
+            elif ! curl -s -o /dev/null --max-time 3 "https://$server/"; then
+              echo "argo-cli server $server not reachable, kube mode: archived workflows not visible" >&2
+            elif ! mint_token "$host"; then
+              echo "could not mint an argo-cli token (''${token_account[$host]}), kube mode: archived workflows not visible" >&2
+            else
+              argo_mode[$host]=server
+            fi
+          fi
+          [ "''${argo_mode[$host]}" = server ]
+        }
+
+        # The ARGO_* assignments reach argo's environment only.
+        argo_server() {
+          local host=$1
+          shift
+          ARGO_SERVER="''${cli_server[$host]}:443" ARGO_HTTP1=true ARGO_SECURE=true ARGO_TOKEN="Bearer ''${argo_token[$host]}" argo "$@"
+        }
+
+        # argo against one UI host; in server mode a rejected token is re-minted once.
+        argo_at() {
+          local host=$1 rc=0
+          shift
+          if server_mode "$host"; then
+            argo_server "$host" "$@" 2> "$tmp/err" || rc=$?
+            if [ "$rc" -ne 0 ] && grep -qiE 'unauthenticated|401' "$tmp/err" && mint_token "$host"; then
+              rc=0
+              argo_server "$host" "$@" 2> "$tmp/err" || rc=$?
+            fi
+            cat "$tmp/err" >&2
+            return "$rc"
+          elif [ -n "''${kube_context[$host]:-}" ]; then
+            env -u ARGO_SERVER -u ARGO_TOKEN argo --context "''${kube_context[$host]}" "$@"
+          else
+            echo "no Argo access configured for $host (argoHosts in files.nix)" >&2
+            return 1
+          fi
+        }
+
+        # Sets sha, pr_url, checks (JSON: context, state, description, url) and wfs
+        # ("host namespace name" of every linked Argo workflow, deduplicated).
+        load_ci() {
+          local pr_json raw
+          case $remote in
+            *codeberg.org*)
+              pr_json=$(tea pulls "$pr" -o json) || return 1
+              sha=$(jq -r '.headSha // empty' <<< "$pr_json")
+              pr_url=$(jq -r '.url // empty' <<< "$pr_json")
+              [ -n "$sha" ] || return 1
+              raw=$(tea api "/repos/{owner}/{repo}/commits/$sha/status") || return 1
+              checks=$(jq -c '[.statuses[]? | {context, state: (.status // .state), description: (.description // ""), url: (.target_url // "")}]' <<< "$raw") || return 1
+              ;;
+            *github.com*)
+              pr_json=$(gh pr view "$pr" --json headRefOid,url) || return 1
+              sha=$(jq -r .headRefOid <<< "$pr_json")
+              pr_url=$(jq -r .url <<< "$pr_json")
+              # gh pr checks exits non-zero while a check fails or is pending.
+              raw=$(gh pr checks "$pr" --json name,state,description,link 2> /dev/null || true)
+              checks=$(jq -c '[.[]? | {context: .name, state: (.state | ascii_downcase), description: (.description // ""), url: (.link // "")}]' <<< "''${raw:-[]}") || return 1
+              ;;
+            *)
+              echo "unsupported remote: $remote" >&2
+              exit 1
+              ;;
+          esac
+          mapfile -t wfs < <(jq -r '[.[].url | capture("^https://(?<h>[^/]+)/workflows/(?<ns>[^/]+)/(?<n>[^/?#]+)") | "\(.h) \(.ns) \(.n)"] | unique | .[]' <<< "$checks")
+        }
+
+        show() {
+          local host ns name
+          load_ci || { echo "could not read the CI of PR #$pr" >&2; return 1; }
+          echo "PR #$pr, head ''${sha:0:12}"
+          if [ "$(jq length <<< "$checks")" -eq 0 ]; then
+            echo "no CI statuses on this commit"
+          else
+            jq -r "$defs"' [["CONTEXT", "STATE", "DESCRIPTION"]] + map([.context, .state, .description]) | table' <<< "$checks"
+          fi
+          for wf in "''${wfs[@]}"; do
+            read -r host ns name <<< "$wf"
+            echo
+            if server_mode "$host"; then
+              echo "== $name ($host, server mode via ''${cli_server[$host]})"
+            else
+              echo "== $name ($host, kube context ''${kube_context[$host]:-none})"
+            fi
+            if argo_at "$host" get "$name" -n "$ns" > "$tmp/out" 2>&1; then
+              cat "$tmp/out"
+            elif ! server_mode "$host" && grep -q 'not found' "$tmp/out"; then
+              echo "https://$host/workflows/$ns/$name"
+              echo "gone from the cluster (garbage-collected); the workflow archive needs server mode"
+            else
+              cat "$tmp/out"
+            fi
+          done
+        }
+
+        # Sets picked to one of wfs, asking when there is more than one.
+        pick_workflow() {
+          local i
+          picked=""
+          case ''${#wfs[@]} in
+            0)
+              echo "no Argo workflow linked from this PR's CI"
+              return 1
+              ;;
+            1) picked=''${wfs[0]} ;;
+            *)
+              for i in "''${!wfs[@]}"; do
+                echo "  $((i + 1))  ''${wfs[$i]##* }"
+              done
+              read -r -p "workflow #: " i || return 1
+              if ! [[ $i =~ ^[0-9]+$ ]] || [ "$i" -lt 1 ] || [ "$i" -gt ''${#wfs[@]} ]; then
+                return 1
+              fi
+              picked=''${wfs[$((i - 1))]}
+              ;;
+          esac
+        }
+
+        # argo logs appended to $tmp/live; 1 when argo had nothing to say.
+        ${prCiLiveLogs}
+
+        # One archived main-logs artifact into $tmp/node.log; prints the HTTP status.
+        # The token reaches curl as a config line on stdin, never as an argument.
+        archived_get() {
+          curl -s --max-time 30 -o "$tmp/node.log" -w '%{http_code}' --config - "$2" \
+            <<< "header = \"Authorization: Bearer ''${argo_token[$1]}\"" || true
+        }
+
+        # Server mode, pods gone: main-logs of the failed Pod nodes (else all of them)
+        # from S3 through the argo-cli server's artifact endpoint.
+        archived_logs() {
+          local host=$1 ns=$2 uid id node phase url code
+          uid=$(jq -r '.metadata.uid // empty' "$tmp/wf.json")
+          if [ -z "$uid" ]; then
+            echo "no logs: the workflow has no uid"
+            return 0
+          fi
+          jq -r ${pkgs.lib.escapeShellArg argoArchivedLogsJq} "$tmp/wf.json" > "$tmp/nodes" || return 0
+          if ! [ -s "$tmp/nodes" ]; then
+            echo "no logs: the workflow has no pod steps"
+            return 0
+          fi
+          while IFS=$'\t' read -r id node phase; do
+            echo "== $node ($phase, archived)"
+            url="https://''${cli_server[$host]}/artifact-files/$ns/archived-workflows/$uid/$id/outputs/main-logs"
+            code=$(archived_get "$host" "$url")
+            if [ "$code" = 401 ] && mint_token "$host"; then
+              code=$(archived_get "$host" "$url")
+            fi
+            if [ "$code" = 200 ] && [ -s "$tmp/node.log" ]; then
+              cat "$tmp/node.log"
+            elif [ "$code" = 200 ] || [ "$code" = 404 ]; then
+              echo "no archived logs for $node"
+            else
+              echo "could not fetch the archived logs of $node (HTTP $code)"
+            fi
+          done < "$tmp/nodes"
+        }
+
+        # Logs of the failed pods the workflow status names, else of the whole
+        # workflow (this argo has no --node-field-selector to narrow it). When argo
+        # has no logs at all, the pods are gone (pod GC): server mode fetches the
+        # archived logs per node, kube mode cannot. Any other argo error is shown
+        # as it is, without the archive.
+        logs() {
+          local host ns name kind arg rc found=0 failed=0
+          pick_workflow || return 0
+          read -r host ns name <<< "$picked"
+          argo_at "$host" get "$name" -n "$ns" -o json > "$tmp/wf.json" || return 0
+          jq -r ${pkgs.lib.escapeShellArg argoLogsJq} "$tmp/wf.json" > "$tmp/plan" || return 0
+          : > "$tmp/live"
+          while IFS=$'\t' read -r kind arg; do
+            if [ "$kind" = pod ]; then
+              echo "== $arg" >> "$tmp/live"
+              rc=0
+              live_logs "$host" "$name" "$arg" -n "$ns" || rc=$?
+            else
+              if [ -n "$arg" ]; then
+                echo "== $name (failed, no pod name in the node status: $arg)" >> "$tmp/live"
+              else
+                echo "== $name" >> "$tmp/live"
+              fi
+              rc=0
+              live_logs "$host" "$name" -n "$ns" || rc=$?
+            fi
+            case $rc in
+              0) found=1 ;;
+              2) failed=1 ;;
+            esac
+          done < "$tmp/plan"
+          if [ "$found" = 1 ] || [ "$failed" = 1 ]; then
+            cat "$tmp/live"
+          elif server_mode "$host"; then
+            archived_logs "$host" "$ns"
+          else
+            echo "no logs: the pods are gone (pod GC); archived logs need server mode"
+          fi
+        }
+
+        open_ui() {
+          local host ns name url=$pr_url
+          if pick_workflow; then
+            read -r host ns name <<< "$picked"
+            url="https://$host/workflows/$ns/$name"
+          fi
+          [ -z "$url" ] || ${htmlOpener} "$url"
+        }
+
+        # Ctrl-C stops argo watch/logs, not the whole loop.
+        trap : INT
+        show
+        while read -r -n 1 -p "[r]efresh [w]atch [l]ogs [o]pen [q]uit: " key; do
+          echo
+          case $key in
+            r) show || true ;;
+            w)
+              if pick_workflow; then
+                read -r host ns name <<< "$picked"
+                argo_at "$host" watch "$name" -n "$ns" || true
+              fi
+              ;;
+            l) logs ;;
+            o) open_ui ;;
+            q) break ;;
+          esac
+        done
+      '';
+    }
+  );
+
+  # What Argo CD and Kargo do with the repo in the current directory: `pr-deploy 42`.
+  # Read-only: no sync, no promotion. Argo CD apps are the ones whose source is this
+  # repo (or an OCI chart named like it); a repo with more than 20 (drift-warden has
+  # over a hundred) is narrowed to the apps whose path or value files the PR touches,
+  # diffed against the PR's own base branch. Apps on this repo's OCI chart are kept:
+  # their impact is unknown.
+  # Kargo shows the project named like the repo, if there is one. Both CLIs use
+  # their own SSO logins.
+  ".local/bin/pr-deploy".source = pkgs.lib.getExe (
+    pkgs.writeShellApplication {
+      name = "pr-deploy";
+      # The jq programs are single-quoted on purpose: their $names are jq's.
+      excludeShellChecks = [ "SC2016" ];
+      runtimeInputs = [
+        pkgs.git
+        pkgs.tea
+        pkgs.gh
+        pkgs.jq
+        pkgs.gnugrep
+        pkgs.argocd
+        pkgs.kargo
+      ];
+      derivationArgs.fixtures = prToolsFixtures;
+      text = ''
+        if ! [[ ''${1:-} =~ ^[0-9]+$ ]]; then
+          echo "usage: pr-deploy <pr-number>  (in a checkout of the PR's repo)" >&2
+          exit 2
+        fi
+        pr=$1
+        remote=$(git remote get-url origin)
+        defs=${pkgs.lib.escapeShellArg jqHelpers}
+        repo_id=$(jq -rn --arg u "$remote" "$defs"' $u | norm')
+        repo=''${repo_id##*/}
+
+        # Sources of an app, and whether one comes from this repo.
+        apps_defs=${pkgs.lib.escapeShellArg argoAppsJq}
+
+        # Sets files to the JSON list of paths the PR changes against its base branch,
+        # or why_not to the reason it cannot. Base and head are fetched into refs of
+        # their own: with two refs, FETCH_HEAD holds only the first.
+        pr_files() {
+          local base out refs=refs/pr-deploy/$pr
+          case $remote in
+            *codeberg.org*) base=$(tea pulls "$pr" -o json 2> /dev/null | jq -r '.base // empty') || base= ;;
+            *github.com*) base=$(gh pr view "$pr" --json baseRefName -q .baseRefName 2> /dev/null) || base= ;;
+            *) base= ;;
+          esac
+          if [ -z "$base" ]; then
+            why_not="could not look up the PR's base branch"
+            return 1
+          fi
+          if ! out=$(git fetch --quiet --no-tags origin "+refs/heads/$base:$refs/base" "+refs/pull/$pr/head:$refs/head" 2>&1); then
+            why_not="could not fetch $base and the PR head: ''${out//$'\n'/ }"
+            return 1
+          fi
+          # --no-renames: a moved file counts for the app it left and the one it joined.
+          if ! out=$(git diff --no-renames --name-only "$refs/base...$refs/head" 2>&1); then
+            why_not="git diff $base...PR head failed: ''${out//$'\n'/ }"
+            git update-ref -d "$refs/base" || true
+            git update-ref -d "$refs/head" || true
+            return 1
+          fi
+          git update-ref -d "$refs/base" || true
+          git update-ref -d "$refs/head" || true
+          files=$(jq -Rsc 'split("\n") | map(select(. != ""))' <<< "$out")
+        }
+
+        # Sets apps: this repo's Argo CD apps (narrowed to the PR when there are many),
+        # OutOfSync/Degraded first.
+        load_apps() {
+          local all total files why_not kept
+          apps="[]"
+          if ! all=$(argocd app list -o json 2>&1); then
+            echo "argocd: $all" >&2
+            return 1
+          fi
+          all=$(jq --arg id "$repo_id" --arg repo "$repo" "$apps_defs"' [.[] | select(any(srcs[]; from_repo))]' <<< "$all")
+          total=$(jq length <<< "$all")
+          if [ "$total" -gt 20 ]; then
+            if pr_files; then
+              kept=$(jq --arg id "$repo_id" --arg repo "$repo" --argjson files "$files" "$apps_defs"' [.[] | select((touched($files) | not) and impact_unknown)] | length' <<< "$all")
+              all=$(jq --arg id "$repo_id" --arg repo "$repo" --argjson files "$files" "$apps_defs"' [.[] | select(touched($files) or impact_unknown)]' <<< "$all")
+              echo "Argo CD: $total apps from this repo, $(($(jq length <<< "$all") - kept)) touched by this PR, $kept kept: OCI chart, impact unknown ($(jq length <<< "$files") files changed)"
+            else
+              echo "Argo CD: $total apps from this repo, not narrowed to the PR: $why_not"
+            fi
+          else
+            echo "Argo CD: $total apps from this repo"
+          fi
+          apps=$(jq --arg id "$repo_id" --arg repo "$repo" "$apps_defs"' sort_by([(.status.sync.status == "OutOfSync" or .status.health.status == "Degraded" | not), .metadata.name])' <<< "$all")
+        }
+
+        show_apps() {
+          load_apps || return 0
+          [ "$(jq length <<< "$apps")" -gt 0 ] || return 0
+          jq -r --arg id "$repo_id" --arg repo "$repo" "$apps_defs"'
+            [["#", "APP", "SYNC", "HEALTH", "REVISION", "LAST OPERATION"]]
+            + [to_entries[] | .key as $k | .value | [
+                ($k + 1 | tostring),
+                .metadata.name,
+                (.status.sync.status // "-"),
+                (.status.health.status // "-"),
+                rev,
+                (.status.operationState.finishedAt // "-")
+              ]]
+            | table' <<< "$apps"
+        }
+
+        show_kargo() {
+          local out stages freight
+          echo
+          if ! out=$(kargo get project "$repo" 2>&1); then
+            if grep -q 'not found' <<< "$out"; then
+              echo "Kargo: no project named $repo"
+            else
+              echo "kargo: $out" >&2
+            fi
+            return 0
+          fi
+          stages=$(kargo get stages --project "$repo" -o json) || return 0
+          freight=$(kargo get freight --project "$repo" -o json) || return 0
+          echo "Kargo: project $repo"
+          jq -r --argjson freight "$freight" "$defs"'
+            ([$freight.items[]? | {key: .metadata.name, value: (.alias // .metadata.name[0:7])}] | from_entries) as $alias
+            | [["STAGE", "FREIGHT", "HEALTH", "PHASE"]]
+              + [.items[]? | [
+                  .metadata.name,
+                  ([(.status.freightHistory[0].items // {})[] | $alias[.name] // .name[0:7]] | join(",") | if . == "" then "-" else . end),
+                  (.status.health.status // "-"),
+                  (.status.phase // ([.status.conditions[]? | select(.type == "Ready") | .reason][0]) // "-")
+                ]]
+            | table' <<< "$stages"
+          jq -r '
+            [.items[]?] | sort_by(.metadata.creationTimestamp) | last // empty
+            | "newest freight: \(.alias // "-") (\(.metadata.name[0:7])), created \(.metadata.creationTimestamp)",
+              ([(.images // [])[] | "  image \(.repoURL):\(.tag)"],
+               [(.commits // [])[] | "  commit \(.repoURL)@\((.id // .tag // "-")[0:7])"],
+               [(.charts // [])[] | "  chart \(.repoURL) \(.name // "") \(.version)"]
+               | .[]),
+              "  in: \((.status.currentlyIn // {}) | keys | join(", ") | if . == "" then "no stage" else . end)"
+          ' <<< "$freight"
+        }
+
+        show() {
+          echo "PR #$pr, repo $repo_id"
+          show_apps
+          show_kargo
+        }
+
+        show
+        while read -r -n 1 -p "[r]efresh [a]rgocd app get [q]uit: " key; do
+          echo
+          case $key in
+            r) show ;;
+            a)
+              read -r -p "app #: " n || continue
+              app=$(jq -r --arg n "$n" '($n | tonumber? // 0) as $i | if $i >= 1 then .[$i - 1] // empty | (if (.metadata.namespace // "argocd") == "argocd" then "" else .metadata.namespace + "/" end) + .metadata.name else empty end' <<< "$apps")
+              if [ -n "$app" ]; then
+                argocd app get "$app" || true
+              else
+                echo "no app #$n"
+              fi
+              ;;
+            q) break ;;
+          esac
         done
       '';
     }
@@ -1797,7 +2589,7 @@ in
   # Ollama ignores the API key; pi just needs a non-empty one to list the models.
   ".pi/agent/models.json".text = builtins.toJSON {
     providers.ollama = {
-      baseUrl = "http://192.168.1.37:11434/v1";
+      baseUrl = "${ollamaUrl}/v1";
       api = "openai-completions";
       apiKey = "ollama";
       # The *-32k variants live on the Ollama host (created via /api/create with
@@ -1900,7 +2692,7 @@ in
     maxTurns = 60;
   };
   ".pi/agent/agents/reviewer-ollama.md".text = piReviewer {
-    model = "ollama/qwen3-coder:30b-32k";
+    model = "ollama/${ollamaReviewModel}";
     label = "qwen3-coder-30b";
     thinking = "off";
     maxTurns = 15;
@@ -1908,10 +2700,11 @@ in
 
   # Cheap general-purpose subagents, on the Claude subscription. Always a full
   # claude-bridge/<id>: a bare "sonnet" resolves to the pay-per-use anthropic provider,
-  # and ChatGPT OAuth rejects the mini OpenAI models.
+  # and ChatGPT OAuth rejects the mini OpenAI models. Descriptions stay double-quoted
+  # (see piReviewer).
   ".pi/agent/agents/scout.md".text = ''
     ---
-    description: Fast read-only search: find files, grep symbols, answer where X is defined; returns paths and short excerpts
+    description: "Fast read-only search: find files, grep symbols, answer where X is defined; returns paths and short excerpts"
     model: claude-bridge/claude-haiku-4-5
     thinking: off
     tools: read, bash, grep, find, ls
@@ -1926,7 +2719,7 @@ in
   '';
   ".pi/agent/agents/worker.md".text = ''
     ---
-    description: Implements a well-specified change: edits, docs, mechanical refactors, running checks
+    description: "Implements a well-specified change: edits, docs, mechanical refactors, running checks"
     model: claude-bridge/claude-sonnet-5-5
     thinking: low
     tools: read, bash, grep, find, ls, edit, write
