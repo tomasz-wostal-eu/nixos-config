@@ -74,6 +74,12 @@ let
     mpush = "gmi sync -C ~/Mail/gmail";
     nm = "notmuch";
     nms = "notmuch search";
+
+    # Forge dashboards. tea-dash is the Codeberg (primary forge) PR/issue board
+    # where PRs are reviewed and merged; gh-dash covers the GitHub mirrors.
+    # Also bound to tmux `prefix + D` (tea-dash) as a popup.
+    td = "tea-dash";
+    ghd = "gh-dash";
   };
 in
 {
@@ -314,6 +320,10 @@ in
         bind -N "last-session (sesh) " L run-shell "sesh last"
         bind -N "workmux dashboard" W display-popup -E -w 90% -h 90% -d "#{pane_current_path}" "workmux dashboard"
         bind -N "workmux sidebar" B run-shell "workmux sidebar"
+        # Codeberg PR/issue dashboard (tea-dash) in a popup, like the workmux one
+        # above. This is where PRs are reviewed and merged; see tea-dash config in
+        # modules/shared/files.nix. `td` / `ghd` shell aliases open the same TUIs.
+        bind -N "tea-dash (Codeberg PRs)" D display-popup -E -w 90% -h 90% -d "#{pane_current_path}" "tea-dash"
         bind-key "T" run-shell "sesh connect \"$(
           sesh list --icons | fzf-tmux -p 80%,70% \
             --no-sort --ansi --border-label ' sesh ' --prompt '⚡  ' \
