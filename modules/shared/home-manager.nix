@@ -116,6 +116,46 @@ in
 
         # Completions come from site-functions (packages + modules/shared/completions.nix)
         # and carapace, not from `source <(x completion zsh)` at every startup.
+
+        # argo CLI against the client-mode argo-server of mistwolf-dev
+        # (drift-warden docs/argo-cli.md). Each call carries a 1 h token of the
+        # read-only ServiceAccount argo-cli, minted with kubectl when needed and
+        # reused from a 0600 cache file for 55 min; namespace argo-workflows
+        # unless ARGO_NAMESPACE or -n says otherwise. `argo login` mints a fresh
+        # token, `argo logout` drops it. A shell that sets ARGO_SERVER itself
+        # bypasses all of this.
+        argo() {
+          if [[ -n $ARGO_SERVER || $# -eq 0 || $1 == (version|completion|help|-h|--help) ]]; then
+            command argo "$@"
+            return
+          fi
+          zmodload -F zsh/stat b:zstat
+          zmodload -F zsh/datetime b:strftime
+          local cache=''${XDG_CACHE_HOME:-$HOME/.cache}/argo-cli/token
+          case $1 in
+            logout) rm -f $cache && print -u2 "argo: token dropped"; return ;;
+            login) rm -f $cache ;;
+          esac
+          local -a fresh=( $cache(N.mm-55) )
+          if (( ! $#fresh )); then
+            local token
+            token=$(kubectl --context mistwolf-dev -n argo-workflows create token argo-cli --duration=1h) || {
+              print -u2 "argo: could not mint an argo-cli token (kubectl context mistwolf-dev)"
+              return 1
+            }
+            mkdir -p -m 700 ''${cache:h}
+            (umask 077 && print -r -- $token >| $cache)
+          fi
+          if [[ $1 == login ]]; then
+            local -a st
+            zstat -A st +mtime $cache
+            print -u2 "argo: argo-cli token valid until $(strftime %H:%M $(( st[1] + 3600 )))"
+            return
+          fi
+          ARGO_SERVER=workflows-cli.tailc90e09.ts.net:443 ARGO_HTTP1=true ARGO_SECURE=true \
+            ARGO_NAMESPACE=''${ARGO_NAMESPACE:-argo-workflows} ARGO_TOKEN="Bearer $(<$cache)" \
+            command argo "$@"
+        }
       '';
     };
 

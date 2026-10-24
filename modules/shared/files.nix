@@ -2637,6 +2637,9 @@ in
         url = "https://mcp.atlassian.com/v1/mcp";
         auth = "oauth";
         approveTools = "destructive";
+        # Its tools hand results to MCP App pages, which pi-mcp-adapter opens
+        # in the browser on every call. false: results come back inline only.
+        openUi = false;
       };
       google-workspace = {
         command = "${pkgs.uv}/bin/uvx";
