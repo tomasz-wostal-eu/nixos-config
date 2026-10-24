@@ -1402,12 +1402,15 @@ in
     r email/oauth/msmtp-gmail.json         "$HOME/.config/msmtp/gmail-oauth.json"
     r email/oauth/msmtp-itomm.json         "$HOME/.config/msmtp/itomm-oauth.json"
     r codeberg/api-token                   "$HOME/.config/codeberg/token"
+    r slack/mcp-client-secret              "$HOME/.config/slack/mcp-client-secret"
     echo
     echo "NOT restorable (runtime state, rotated by the tools themselves):"
     echo "  ~/Mail/{gmail,itomm}/.credentials.gmailieer.json"
     echo "    -> gmi auth -C ~/Mail/<repo> -c ~/.config/lieer/client_secret.json"
     echo "  ~/.local/share/vdirsyncer/{google,itomm}_token"
     echo "    -> vdirsyncer discover"
+    echo "  ~/.local/share/workspace-mcp/*.json"
+    echo "    -> first google-workspace MCP call per account opens the consent page"
   '';
 
   # Counterpart: push the current on-disk secrets back into pass after a
@@ -1426,6 +1429,7 @@ in
     b email/oauth/msmtp-gmail.json         "$HOME/.config/msmtp/gmail-oauth.json"
     b email/oauth/msmtp-itomm.json         "$HOME/.config/msmtp/itomm-oauth.json"
     b codeberg/api-token                   "$HOME/.config/codeberg/token"
+    b slack/mcp-client-secret              "$HOME/.config/slack/mcp-client-secret"
     if ${pkgs.git}/bin/git -C "$HOME/.password-store" rev-parse --git-dir >/dev/null 2>&1; then
       ${pkgs.pass}/bin/pass git push 2>/dev/null && echo "  pushed to remote" || echo "  (push failed - check remote)"
     fi
@@ -1808,6 +1812,77 @@ in
         { id = "devstral:24b-32k"; contextWindow = 32768; maxTokens = 16384; }
         { id = "qwen3-coder:30b-32k"; contextWindow = 32768; maxTokens = 16384; }
       ];
+    };
+  };
+
+  # MCP servers for pi (pi-mcp-adapter reads this shared file; its own settings
+  # and tool toggles go to ~/.pi/agent/mcp-adapter.json, so a read-only symlink
+  # is fine). Secrets stay in 0600 files: a leading `!` in env runs the command
+  # through bash when the server starts.
+  # - google-workspace: one server for both accounts (each tool takes
+  #   user_google_email; the first call per account opens Google's consent page,
+  #   callback on localhost:8000). Reuses lieer's Desktop OAuth client, whose GCP
+  #   project also needs the Drive API enabled. Gmail is read-only, Drive can
+  #   write. Not in nixpkgs, so uvx with a pinned version.
+  # - grafana: token of the claude-mcp service account (Admin, so read-write),
+  #   read from drift-warden's Key Vault at start (needs `az login`; ~2 s of
+  #   the adapter's 10 s command budget). Rotation: drift-warden
+  #   docs/observability.md. A copy sits in pass (grafana/mcp-sa-token); after
+  #   a rotation refresh it from Key Vault.
+  # - slack: Slack's hosted server, workspace mistwolf. It has no dynamic client
+  #   registration, so it signs in through our own app "pi MCP" (A0CBEJLQ4BZ,
+  #   created from a manifest with is_mcp_enabled and read-only user scopes).
+  #   The redirect URL is fixed in the app; the secret stays in a 0600 file,
+  #   with copies in pass (slack/mcp-client-secret) and in Key Vault
+  #   kv-driftwardendev (slack-mcp-client-secret).
+  # - chrome: Claude in Chrome, the same browser tools Claude Code gets with
+  #   --chrome. It drives the real Chrome through the extension and the native
+  #   host claude installs, so the sessions you are signed in to are in reach.
+  #   --claude-in-chrome-mcp is an undocumented claude flag and may change.
+  ".config/mcp/mcp.json".text = builtins.toJSON {
+    mcpServers = {
+      atlassian = {
+        url = "https://mcp.atlassian.com/v1/mcp";
+        auth = "oauth";
+        approveTools = "destructive";
+      };
+      google-workspace = {
+        command = "${pkgs.uv}/bin/uvx";
+        args = [
+          "workspace-mcp==2.2.0"
+          "--permissions"
+          "gmail:readonly"
+          "drive:full"
+        ];
+        env = {
+          GOOGLE_CLIENT_SECRET_PATH = "\${HOME}/.config/lieer/client_secret.json";
+          WORKSPACE_MCP_CREDENTIALS_DIR = "\${HOME}/.local/share/workspace-mcp";
+        };
+        approveTools = "destructive";
+      };
+      grafana = {
+        command = "${pkgs.mcp-grafana}/bin/mcp-grafana";
+        env = {
+          GRAFANA_URL = "https://grafana.mistwolf.tech";
+          GRAFANA_SERVICE_ACCOUNT_TOKEN = "!${pkgs.azure-cli}/bin/az keyvault secret show --vault-name kv-driftwardendev --name grafana-mcp-sa-token --query value -o tsv";
+        };
+        approveTools = "destructive";
+      };
+      slack = {
+        url = "https://mcp.slack.com/mcp";
+        auth = "oauth";
+        oauth = {
+          clientId = "10097094100597.12388632820407";
+          clientSecret = "!cat \"$HOME/.config/slack/mcp-client-secret\"";
+          redirectUri = "http://localhost:3118/callback";
+        };
+        approveTools = "destructive";
+      };
+      chrome = {
+        command = "${pkgs.claude-code}/bin/claude";
+        args = [ "--claude-in-chrome-mcp" ];
+        approveTools = "destructive";
+      };
     };
   };
 
