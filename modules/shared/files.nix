@@ -2609,6 +2609,14 @@ in
     };
   };
 
+  # Catppuccin Macchiato for pi, from the pi-catppuccin npm package (schema
+  # matches pi's theme-schema.json). Selected via "theme" in the mutable
+  # settings.json (or /settings).
+  ".pi/agent/themes/catppuccin-macchiato.json".source = "${pkgs.fetchzip {
+    url = "https://registry.npmjs.org/@sherif-fanous/pi-catppuccin/-/pi-catppuccin-0.3.0.tgz";
+    hash = "sha256-bQcwdIkvftARigfQ3WnimdONBu+ubx4UnXmqFzHxiVA=";
+  }}/themes/catppuccin-macchiato.json";
+
   # MCP servers for pi (pi-mcp-adapter reads this shared file; its own settings
   # and tool toggles go to ~/.pi/agent/mcp-adapter.json, so a read-only symlink
   # is fine). Secrets stay in 0600 files: a leading `!` in env runs the command

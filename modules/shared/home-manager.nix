@@ -322,6 +322,8 @@ in
         # so shift-enter etc. never reach TUIs like pi. `extkeys` tells tmux the
         # outer terminal can carry them — ghostty and xterm-256color both can.
         set -s extended-keys on
+        # tmux defaults to the xterm modifyOtherKeys format; pi expects CSI u.
+        set -s extended-keys-format csi-u
         set -as terminal-features ",xterm-ghostty:extkeys"
         set -as terminal-features ",xterm-256color:extkeys"
         # Undercurl + coloured underlines (nvim diagnostics) and strikethrough:

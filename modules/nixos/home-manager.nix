@@ -30,6 +30,7 @@ in
         theme = "catppuccin-macchiato";
         font-family = "JetBrainsMono Nerd Font";
         font-size = 12;
+        background-opacity = 0.9;
         background-blur-radius = 20;
         mouse-hide-while-typing = true;
         window-decoration = true;
