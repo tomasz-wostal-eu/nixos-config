@@ -2598,6 +2598,15 @@ in
   #   read-write (MCP_READ_ONLY unset). The argocd CLI's own token is an SSO
   #   session (Authentik, 1 h), so this uses an API token of a local account
   #   in a 0600 file, with a copy in pass (argocd/mcp-api-token).
+  # - home-assistant: HA's own MCP Server integration (Assist intents, live
+  #   context, exposed scripts) at 192.168.1.208. Only entities exposed to
+  #   Assist are reachable, and it can't edit configuration. Plain http on the
+  #   LAN, so the long-lived token travels in clear there. The token sits in a
+  #   0600 file, with copies in pass (home-assistant/mcp-token) and in Key
+  #   Vault kv-driftwardendev (home-assistant-mcp-token).
+  # - ha-mcp: homeassistant-ai/ha-mcp (unofficial) on the same HA and token,
+  #   for configuration: automations, scripts, helpers, history, logs. Not in
+  #   nixpkgs, so uvx with a pinned version.
   ".config/mcp/mcp.json".text = builtins.toJSON {
     mcpServers = {
       atlassian = {
@@ -2656,6 +2665,22 @@ in
         env = {
           ARGOCD_BASE_URL = "https://cd.mistwolf.tech";
           ARGOCD_API_TOKEN = "!cat \"$HOME/.config/argocd/mcp-api-token\"";
+        };
+        approveTools = "destructive";
+      };
+      home-assistant = {
+        url = "http://192.168.1.208:8123/api/mcp";
+        # Without auth = "bearer" the adapter ignores bearerToken and tries OAuth.
+        auth = "bearer";
+        bearerToken = "!cat \"$HOME/.config/home-assistant/token\"";
+        approveTools = "destructive";
+      };
+      ha-mcp = {
+        command = "${pkgs.uv}/bin/uvx";
+        args = [ "ha-mcp==8.7.0" ];
+        env = {
+          HOMEASSISTANT_URL = "http://192.168.1.208:8123";
+          HOMEASSISTANT_TOKEN = "!cat \"$HOME/.config/home-assistant/token\"";
         };
         approveTools = "destructive";
       };
