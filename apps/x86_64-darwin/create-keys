@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2086  # inherited template script, behaviour kept as is
 set -e
 
 RED='\033[0;31m'

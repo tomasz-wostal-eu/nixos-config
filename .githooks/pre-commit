@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Fast checks on the staged files only (DW-231): shellcheck on shell scripts.
+# Bypass: git commit --no-verify, or NC_HOOKS_SKIP=1. A missing tool is a skip, never a block.
+set -eu
+
+[ "${NC_HOOKS_SKIP:-}" = "1" ] && exit 0
+cd "$(git rev-parse --show-toplevel)"
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -n "$staged" ] || exit 0
+
+# check.sh falls back to Docker and skips (NC_SKIP_MISSING=1) when neither tool is there
+echo "$staged" | tr '\n' '\0' | NC_SKIP_MISSING=1 xargs -0 tests/shell/check.sh

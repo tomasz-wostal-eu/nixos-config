@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Commit message hint (DW-231): the repo documents no commit format (AGENTS.md: short imperative
+# subjects), so this only warns about a missing or oversized subject and never rejects.
+# Bypass: git commit --no-verify, or NC_HOOKS_SKIP=1.
+set -eu
+
+[ "${NC_HOOKS_SKIP:-}" = "1" ] && exit 0
+
+subject=$(grep -v '^#' "$1" | sed -n '1p')
+
+case "$subject" in
+  "Merge "* | "Revert "* | "fixup!"* | "squash!"* | "amend!"*) exit 0 ;;
+esac
+
+if [ -z "$subject" ]; then
+  echo "commit-msg: warning: empty subject" >&2
+elif [ "${#subject}" -gt 72 ]; then
+  echo "commit-msg: warning: subject is ${#subject} characters, keep it short (<= 72)" >&2
+fi
+exit 0

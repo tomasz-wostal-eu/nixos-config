@@ -272,6 +272,22 @@ Token caches that the tools rewrite themselves — `.credentials.gmailieer.json`
 `vdirsyncer/*_token` — are deliberately not in `pass`; re-run `gmi auth` or
 `vdirsyncer discover` instead.
 
+## Git hooks
+
+Versioned hooks live in `.githooks/`. Enable them once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+- `pre-commit`: shellcheck on the staged shell scripts.
+- `commit-msg`: only warns about an empty or overlong subject; never rejects.
+- `pre-push`: shellcheck on all tracked shell scripts (`tests/shell/check.sh`).
+  `nix flake check` and builds are not run.
+
+Bypass with `--no-verify` or `NC_HOOKS_SKIP=1`. Without shellcheck and Docker the hooks skip
+the check; with Docker, `tests/shell/check.sh` runs a pinned shellcheck image.
+
 ## Credits
 
 Based on [dustinlyons/nixos-config](https://github.com/dustinlyons/nixos-config).

@@ -1,4 +1,5 @@
 #!/bin/sh -e
+# shellcheck disable=SC2086,SC2162  # inherited template script, behaviour kept as is
 
 GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
