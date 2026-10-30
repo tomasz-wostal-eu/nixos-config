@@ -125,10 +125,8 @@ with pkgs;
   # binary is `pi`, multi-provider (Anthropic/OpenAI/Google/Bedrock/...)
   pi-coding-agent
   pipx
+  playwright-test # `playwright` CLI; browsers via `playwright install` (macOS)
   pnpm
-  podman
-  podman-compose
-  podman-tui
   poetry
   ponysay
   posting
@@ -139,6 +137,7 @@ with pkgs;
   ruby
   rustc
   s3cmd
+  shellcheck
   # sonar-scanner # not in nixpkgs
   sqlfluff
   sqlite

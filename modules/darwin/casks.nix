@@ -7,7 +7,6 @@ _:
   "dbeaver-community"
   "docker-desktop"
   "dotnet-sdk"
-  "figma"
   "flutter"
   "utm"
   "visual-studio-code"
@@ -47,7 +46,6 @@ _:
   # Security
   "bitwarden"
   "gpg-suite"
-  "macfuse"
 
   # Media & Creative
   "audacity"
@@ -64,7 +62,6 @@ _:
 
   # Network Tools
   "mqtt-explorer"
-  "wireshark-app"
   "zenmap"
 
   # Microsoft Office
