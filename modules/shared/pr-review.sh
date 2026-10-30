@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Review a PR with pi reviewer subagents in its own throwaway worktree. Generic form of
-# scripts/dw-review and scripts/met-review, for repos without a flow of their own.
+# Review a PR with pi reviewer subagents in its own throwaway worktree. The one review flow
+# for every repo; scripts/dw-review, met-review and we-review are thin wrappers that exec
+# this with their --jira-prefix (DW-242), so it must never call back into them.
 #
 #   pr-review <pr>                       interactive: the `review` layout, pi + reviewer panes
 #   pr-review <pr> --quick               one-shot: reviewer-openai only, printed to this terminal
@@ -37,14 +38,6 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 [[ -n $pr ]] || usage
-
-# Repos that keep their own flow keep it.
-for own in scripts/dw-review scripts/met-review; do
-  if [[ -x $own ]]; then
-    if ((quick)); then exec "$own" "$pr" --quick; fi
-    exec "$own" "$pr"
-  fi
-done
 
 remote=$(git remote get-url origin)
 case $remote in

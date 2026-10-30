@@ -1856,8 +1856,8 @@ in
   ".local/bin/pi-ollama-up".source = pkgs.lib.getExe piOllamaUp;
 
   # Reviews a PR of the repo in the current directory: `pr-review 42 [--quick]
-  # [--jira-prefix KEY]`. Generic form of scripts/dw-review and scripts/met-review (a repo
-  # that still has one keeps it); any other repo, on GitHub or Codeberg, gets a worktree
+  # [--jira-prefix KEY]`. The one review flow: scripts/dw-review, met-review and we-review
+  # are thin wrappers around it (DW-242). Any repo, on GitHub or Codeberg, gets a worktree
   # review/pr-<n> on the PR head with the `review` layout and the reviewers briefed with the
   # base branch's AGENTS.md. Reviews go out through agent-review-post. Source: pr-review.sh.
   ".local/bin/pr-review".source = pkgs.lib.getExe (

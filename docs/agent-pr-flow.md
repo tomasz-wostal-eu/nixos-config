@@ -176,8 +176,10 @@ follow the format their automation documents. The reviewers do not report
 missing ticket keys or naming there; they review the change itself. They decide
 from the author and head branch in the task.
 
-Overrides: `scripts/dw-review` / `scripts/met-review`, if present and executable,
-replace `pr-review` **entirely** (they are `exec`'d before the fetch and prompt).
+Repo scripts: `scripts/dw-review` (drift-warden), `scripts/met-review` (metanol) and
+`scripts/we-review` (wostal-eu) are thin wrappers. They check they run in their own
+repository and `exec pr-review "$@" --jira-prefix <KEY>`; the flow itself lives only
+here (DW-242). `pr-review` never calls a repo script, so the wrappers cannot loop.
 A `layouts.review` block in a repo's `.workmux.yaml` only customizes the tmux
 panes — the `refs/pull/<n>/head` fetch, the `review/pr-<n>` branch, and the review
 prompt still come from `pr-review`.
