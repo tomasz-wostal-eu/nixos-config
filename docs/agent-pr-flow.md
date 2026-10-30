@@ -21,7 +21,7 @@ hooks.
 | `tea-dash` | gh-dash for Codeberg; PR/issue dashboard, review keybindings | `~/.config/tea-dash/config.yml` — `modules/shared/files.nix` |
 | `gh-dash` | PR/issue dashboard for GitHub repos | `modules/shared/home-manager.nix` |
 | `wja` | Start a task from a Jira key → fresh branch + worktree + prompt | `modules/shared/files.nix` (`.local/bin/wja`) |
-| `pr-review` | Open the `review` layout for a PR (checks out the PR head) | `modules/shared/files.nix` (`.local/bin/pr-review`) |
+| `pr-review` | `pr-review <pr> [--quick] [--jira-prefix KEY]`: open the `review` layout for a PR (checks out the PR head) | `modules/shared/files.nix` (`.local/bin/pr-review`), source `modules/shared/pr-review.sh` |
 | `agent-review-post` | Collect reviewer files and post them to the PR (with preview) | `modules/shared/files.nix` (`.local/bin/agent-review-post`) |
 | `pi-ollama-up` | Exit 0 when Ollama answers within 2 s and has the reviewer model; `pr-review` uses it | `modules/shared/files.nix` (`.local/bin/pi-ollama-up`, `ollamaUrl`) |
 | `pr-ci` | CI statuses of a PR's head commit, plus `argo get` of every Argo workflow they link to | `modules/shared/files.nix` (`.local/bin/pr-ci`, `argoHosts`) |

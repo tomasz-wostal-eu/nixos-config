@@ -1855,14 +1855,11 @@ in
   # Is the Ollama reviewer usable right now? Silent on success (piOllamaUp above).
   ".local/bin/pi-ollama-up".source = pkgs.lib.getExe piOllamaUp;
 
-  # Starts the review layout for a PR of the repo in the current directory:
-  # `pr-review 42`. A repo with its own flow (scripts/dw-review, scripts/met-review)
-  # keeps it; any other repo gets a worktree review/pr-<n> on the PR head with the
-  # `review` layout: pi as the orchestrator, which runs the reviewer subagents
-  # (.pi/agent/agents/reviewer-*.md below). Each writes .workmux/review-<model>.md,
-  # which agent-review-post posts. The reviewers get the PR author and head branch, so
-  # they can tell an automated PR (Renovate, release tooling) from a human one; when
-  # Ollama is down, pi is not asked about reviewer-ollama at all.
+  # Reviews a PR of the repo in the current directory: `pr-review 42 [--quick]
+  # [--jira-prefix KEY]`. Generic form of scripts/dw-review and scripts/met-review (a repo
+  # that still has one keeps it); any other repo, on GitHub or Codeberg, gets a worktree
+  # review/pr-<n> on the PR head with the `review` layout and the reviewers briefed with the
+  # base branch's AGENTS.md. Reviews go out through agent-review-post. Source: pr-review.sh.
   ".local/bin/pr-review".source = pkgs.lib.getExe (
     pkgs.writeShellApplication {
       name = "pr-review";
@@ -1871,60 +1868,12 @@ in
         pkgs.tea
         pkgs.gh
         pkgs.jq
+        pkgs.coreutils
+        pkgs.findutils
+        pkgs.gnugrep
         piOllamaUp
       ];
-      text = ''
-        if ! [[ ''${1:-} =~ ^[0-9]+$ ]]; then
-          echo "usage: pr-review <pr-number>" >&2
-          exit 2
-        fi
-        pr=$1
-
-        for own in scripts/dw-review scripts/met-review; do
-          if [ -x "$own" ]; then
-            exec "$own" "$pr"
-          fi
-        done
-
-        git fetch --prune origin "refs/pull/$pr/head"
-        sha=$(git rev-parse FETCH_HEAD)
-        base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null || echo origin/main)
-
-        # Who opened the PR and from which branch. Best effort: any failure just
-        # leaves the clause out of the reviewer task.
-        meta=""
-        case $(git remote get-url origin 2> /dev/null || true) in
-          *codeberg.org*)
-            meta=$(tea pulls "$pr" -o json 2> /dev/null | jq -r '"\(.user // "") \(.head // "")"' 2> /dev/null || true)
-            ;;
-          *github.com*)
-            meta=$(gh pr view "$pr" --json headRefName,author -q '"\(.author.login // "") \(.headRefName // "")"' 2> /dev/null || true)
-            ;;
-        esac
-        by=""
-        read -r login head <<< "$meta" || true
-        if [ -n "''${login:-}" ] && [ -n "''${head:-}" ]; then
-          by=" (opened by $login from branch $head)"
-        fi
-        task="review PR #$pr$by against base $base"
-
-        if pi-ollama-up; then
-          steps="1. Run \`git diff --stat $base...HEAD\` and show me the size of the change. Then ask me whether to run the second reviewer, reviewer-ollama (a local model with 32k of context: a diff of more than about 1500 lines will not fit). Wait for my answer.
-        2. Spawn reviewer-openai, and reviewer-ollama only if I said yes, in the background and in parallel. Give each the task: $task."
-        else
-          steps="1. Tell me that Ollama is unreachable, so reviewer-ollama does not run this time. Run \`git diff --stat $base...HEAD\` and show me the size of the change.
-        2. Spawn reviewer-openai in the background. Give it the task: $task. Do not spawn reviewer-ollama."
-        fi
-
-        prompt="You orchestrate the review of pull request #$pr. The PR head is checked out here on branch review/pr-$pr; its base is $base. You do not review it yourself: the reviewer subagents do.
-
-        $steps
-        3. When the reviewers you spawned finish, check that each wrote its .workmux/review-*.md file, and give me a short summary: the verdict and the top findings of each. Point out where they disagree.
-
-        Do not edit tracked files, commit, push or post anything to the forge. I post the reviews myself with agent-review-post."
-
-        exec workmux add "review/pr-$pr" --name "pr-$pr" --base "$sha" -l review -p "$prompt"
-      '';
+      text = builtins.readFile ./pr-review.sh;
     }
   );
 
