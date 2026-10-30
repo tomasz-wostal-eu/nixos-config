@@ -1517,40 +1517,24 @@ in
     }
   );
 
-  # Starts the review layout for a PR of the repo in the current directory:
-  # `pr-review 42`. A repo with its own flow (scripts/dw-review, scripts/met-review)
-  # keeps it; any other repo gets a worktree review/pr-<n> on the PR head with the
-  # `review` layout. The prompt tells the reviewers to stay inside the diff and to
-  # write their review to .workmux/review-<agent>.md, which agent-review-post posts.
+  # Reviews a PR of the repo in the current directory: `pr-review 42 [--quick]
+  # [--jira-prefix KEY]`. Generic form of scripts/dw-review and scripts/met-review (a repo
+  # that still has one keeps it); any other repo, on GitHub or Codeberg, gets a worktree
+  # review/pr-<n> on the PR head with the `review` layout and the reviewers briefed with the
+  # base branch's AGENTS.md. Reviews go out through agent-review-post. Source: pr-review.sh.
   ".local/bin/pr-review".source = pkgs.lib.getExe (
     pkgs.writeShellApplication {
       name = "pr-review";
-      runtimeInputs = [ pkgs.git ];
-      text = ''
-        if ! [[ ''${1:-} =~ ^[0-9]+$ ]]; then
-          echo "usage: pr-review <pr-number>" >&2
-          exit 2
-        fi
-        pr=$1
-
-        for own in scripts/dw-review scripts/met-review; do
-          if [ -x "$own" ]; then
-            exec "$own" "$pr"
-          fi
-        done
-
-        git fetch --prune origin "refs/pull/$pr/head"
-        sha=$(git rev-parse FETCH_HEAD)
-        base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null || echo origin/main)
-
-        prompt="You are the reviewer for pull request #$pr. The PR head is checked out here on branch review/pr-$pr; its base is $base.
-
-        Review the change shown by \`git diff $base...HEAD\`. Stay inside that diff: open another file only when a changed line calls into it, and do not read dependency sources or build the whole project. Look for correctness bugs first, then anything that would break on a clean machine.
-
-        Do not edit tracked files, commit, push or post anything to the forge. Write the review in English as findings ordered by severity, each naming file:line, why it matters and what you would change, ending with one line: approve, or request changes. Write the same review to .workmux/review-<your-name>.md as your instructions say."
-
-        exec workmux add "review/pr-$pr" --name "pr-$pr" --base "$sha" -l review -p "$prompt"
-      '';
+      runtimeInputs = [
+        pkgs.git
+        pkgs.tea
+        pkgs.gh
+        pkgs.jq
+        pkgs.coreutils
+        pkgs.findutils
+        pkgs.gnugrep
+      ];
+      text = builtins.readFile ./pr-review.sh;
     }
   );
 
