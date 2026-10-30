@@ -2607,6 +2607,15 @@ in
   # - ha-mcp: homeassistant-ai/ha-mcp (unofficial) on the same HA and token,
   #   for configuration: automations, scripts, helpers, history, logs. Not in
   #   nixpkgs, so uvx with a pinned version.
+  # - n8n: czlonkowski/n8n-mcp against n8n.mistwolf.tech (the n8n-postiz-stack
+  #   in ~/projects/n8n): node docs and schemas, plus creating, editing and
+  #   validating workflows through the n8n API. Not in nixpkgs, so npx with a
+  #   pinned version. The API key sits in a 0600 file, with a copy in Key
+  #   Vault kv-driftwardendev (n8n-api-key).
+  # - postiz: Postiz's own MCP server at postiz.mistwolf.tech (channels,
+  #   creating and scheduling posts), streamable HTTP with the public API key
+  #   as a bearer token. The key sits in a 0600 file; the source is Key Vault
+  #   kv-driftwardendev (postiz-public-api-key).
   ".config/mcp/mcp.json".text = builtins.toJSON {
     mcpServers = {
       atlassian = {
@@ -2682,6 +2691,25 @@ in
           HOMEASSISTANT_URL = "http://192.168.1.208:8123";
           HOMEASSISTANT_TOKEN = "!cat \"$HOME/.config/home-assistant/token\"";
         };
+        approveTools = "destructive";
+      };
+      n8n = {
+        command = "${pkgs.nodejs_24}/bin/npx";
+        args = [ "-y" "n8n-mcp@2.99.1" ];
+        env = {
+          MCP_MODE = "stdio";
+          LOG_LEVEL = "error";
+          DISABLE_CONSOLE_OUTPUT = "true";
+          N8N_MCP_TELEMETRY_DISABLED = "true";
+          N8N_API_URL = "https://n8n.mistwolf.tech";
+          N8N_API_KEY = "!cat \"$HOME/.config/n8n/api-key\"";
+        };
+        approveTools = "destructive";
+      };
+      postiz = {
+        url = "https://postiz.mistwolf.tech/api/mcp";
+        auth = "bearer";
+        bearerToken = "!cat \"$HOME/.config/postiz/api-key\"";
         approveTools = "destructive";
       };
     };
