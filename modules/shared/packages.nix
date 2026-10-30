@@ -39,7 +39,6 @@ with pkgs;
   gcc
   gh
   git-bug # issues stored as git objects; rides to Codeberg over plain git refs
-  gitea-actions-runner # Homebrew act_runner / gitea-runner
   gitleaks
   gnupg
   go
@@ -194,12 +193,12 @@ with pkgs;
   mkdocs
   google-cloud-sdk
 ]
-++ lib.optionals (stdenv.isLinux && stdenv.hostPlatform.isx86_64) [
+++ lib.optionals (stdenv.hostPlatform.isLinux && stdenv.hostPlatform.isx86_64) [
   android-studio # pulls in pkgsi686Linux, x86-only
   slack
   steam
 ]
-++ lib.optionals stdenv.isLinux [
+++ lib.optionals stdenv.hostPlatform.isLinux [
   # Homebrew equivalents available in nixpkgs for Linux.
   audacity
   brave

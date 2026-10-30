@@ -36,9 +36,9 @@ let
 
   # Hand a file to the desktop's default handler. `open` is not a store path
   # because it is part of macOS itself.
-  htmlOpener = if pkgs.stdenv.isDarwin then "/usr/bin/open" else "${pkgs.xdg-utils}/bin/xdg-open";
+  htmlOpener = if pkgs.stdenv.hostPlatform.isDarwin then "/usr/bin/open" else "${pkgs.xdg-utils}/bin/xdg-open";
 
-  homeDir = if pkgs.stdenv.isDarwin then "/Users/twostal" else "/home/twostal";
+  homeDir = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/twostal" else "/home/twostal";
 
   # Auto-tagging for notmuch, derived from what is actually in the mailbox:
   # 41k messages from 1045 sender domains, where the top 30 domains carry over

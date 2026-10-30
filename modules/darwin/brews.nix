@@ -1,7 +1,6 @@
 _:
 
 [
-  "act_runner"
   "conftest"
   "crane"
   "htmlhint"

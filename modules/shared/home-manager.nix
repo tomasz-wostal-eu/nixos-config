@@ -676,10 +676,12 @@ in
             installDependencies = true;
             installRuntimeDependencies = true;
           };
+          # The extra's own deps (python3Packages.cmakelang/cmakelint) do not
+          # exist in nixpkgs; cmake-format and cmake-lint come via extraPackages.
           cmake = {
             enable = true;
-            installDependencies = true;
-            installRuntimeDependencies = true;
+            installDependencies = false;
+            installRuntimeDependencies = false;
           };
           docker = {
             enable = true;
@@ -862,6 +864,7 @@ in
         pyright
         markdown-toc
         pipx
+        cmake-format
         cmake-lint
         cmake
         fsautocomplete
