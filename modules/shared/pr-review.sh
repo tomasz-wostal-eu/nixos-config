@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Review a PR with pi reviewer subagents in its own throwaway worktree. The one review flow
-# for every repo; scripts/dw-review, met-review and we-review are thin wrappers that exec
-# this with their --jira-prefix (DW-242), so it must never call back into them.
+# for every repo; scripts/*-review are thin wrappers that exec this with their --jira-prefix
+# (DW-242), so it must never call back into them. The dashboards' `r` goes through
+# pr-review-repo, which picks the wrapper or this script (DW-245).
 #
 #   pr-review <pr>                       interactive: the `review` layout, pi + reviewer panes
 #   pr-review <pr> --quick               one-shot: reviewer-openai only, printed to this terminal

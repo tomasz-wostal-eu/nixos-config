@@ -23,6 +23,7 @@ hooks.
 | `wja` | Start a task from a Jira key → fresh branch + worktree + prompt | `modules/shared/files.nix` (`.local/bin/wja`) |
 | `pr-review` | `pr-review <pr> [--quick] [--jira-prefix KEY]`: open the `review` layout for a PR (checks out the PR head) | `modules/shared/files.nix` (`.local/bin/pr-review`), source `modules/shared/pr-review.sh` |
 | `agent-review-post` | Collect reviewer files and post them to the PR (with preview) | `modules/shared/files.nix` (`.local/bin/agent-review-post`) |
+| `pr-review-repo` | `pr-review-repo <pr> [--quick]`: what `r` in tea-dash/gh-dash runs; the repo's single `scripts/*-review` wrapper if it has one (adds the Jira key), else `pr-review` | `modules/shared/files.nix` (`.local/bin/pr-review-repo`), source `modules/shared/pr-review-repo.sh` |
 | `pi-ollama-up` | Exit 0 when Ollama answers within 2 s and has the reviewer model; `pr-review` uses it | `modules/shared/files.nix` (`.local/bin/pi-ollama-up`, `ollamaUrl`) |
 | `pr-ci` | CI statuses of a PR's head commit, plus `argo get` of every Argo workflow they link to | `modules/shared/files.nix` (`.local/bin/pr-ci`, `argoHosts`) |
 | `pr-deploy` | Read-only view of what Argo CD and Kargo do with the repo (apps the PR touches, stages, freight) | `modules/shared/files.nix` (`.local/bin/pr-deploy`) |
@@ -131,7 +132,9 @@ Layouts (`-l`) and `--agent` are **separate modes** and do not combine:
 
 ### 2. Review a PR
 
-From `tea-dash` (Codeberg) or `gh-dash` (GitHub), press **`r`** on a PR, or run:
+From `tea-dash` (Codeberg) or `gh-dash` (GitHub), press **`r`** on a PR (it runs
+`pr-review-repo`, which uses the repo's own `scripts/*-review` wrapper when there is
+exactly one, so the reviewers get the Jira key, and plain `pr-review` otherwise), or run:
 
 ```sh
 pr-review 42
@@ -176,10 +179,11 @@ follow the format their automation documents. The reviewers do not report
 missing ticket keys or naming there; they review the change itself. They decide
 from the author and head branch in the task.
 
-Repo scripts: `scripts/dw-review` (drift-warden), `scripts/met-review` (metanol) and
-`scripts/we-review` (wostal-eu) are thin wrappers. They check they run in their own
+Repo scripts: `scripts/dw-review` (drift-warden), `met-review` (metanol), `nh-review`,
+`we-review` (wostal-eu) and `aa-review` are thin wrappers. They check they run in their own
 repository and `exec pr-review "$@" --jira-prefix <KEY>`; the flow itself lives only
-here (DW-242). `pr-review` never calls a repo script, so the wrappers cannot loop.
+here (DW-242). `pr-review` never calls a repo script, so the wrappers cannot loop. The dashboard key goes through `pr-review-repo` (DW-245),
+which only picks the wrapper or `pr-review`.
 A `layouts.review` block in a repo's `.workmux.yaml` only customizes the tmux
 panes — the `refs/pull/<n>/head` fetch, the `review/pr-<n>` branch, and the review
 prompt still come from `pr-review`.

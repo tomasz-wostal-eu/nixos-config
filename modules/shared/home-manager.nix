@@ -576,7 +576,7 @@ in
           {
             key = "r";
             name = "review (pi + subagents)";
-            command = "tmux new-window -c {{.RepoPath}} 'pr-review {{.PrNumber}}; printf \"press enter \"; read x'";
+            command = "tmux new-window -c {{.RepoPath}} 'pr-review-repo {{.PrNumber}}; printf \"press enter \"; read x'";
           }
           {
             key = "P";

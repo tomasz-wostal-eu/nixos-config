@@ -1052,7 +1052,7 @@ in
           name: review (pi + subagents)
           command: >-
             tmux new-window '
-              cd {{.RepoPath}} && pr-review {{.PrNumber}}; printf "press enter "; read x
+              cd {{.RepoPath}} && pr-review-repo {{.PrNumber}}; printf "press enter "; read x
             '
         - key: P
           name: post reviews to the PR
@@ -1874,6 +1874,17 @@ in
         piOllamaUp
       ];
       text = builtins.readFile ./pr-review.sh;
+    }
+  );
+
+  # What tea-dash and gh-dash `r` run: the repo's own scripts/*-review wrapper when it has
+  # exactly one (so the reviewers get the Jira key, DW-245), else pr-review. Source:
+  # pr-review-repo.sh.
+  ".local/bin/pr-review-repo".source = pkgs.lib.getExe (
+    pkgs.writeShellApplication {
+      name = "pr-review-repo";
+      runtimeInputs = [ pkgs.coreutils ];
+      text = builtins.readFile ./pr-review-repo.sh;
     }
   );
 
