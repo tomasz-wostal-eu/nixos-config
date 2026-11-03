@@ -2798,6 +2798,19 @@ in
     - Keep design decisions, integration and the final verification in the main session.
     - Launch independent subagents in parallel.
 
+    # Research before architecture
+
+    Before an architectural decision (a new component, a network or storage change, choosing a
+    tool or a product), research first and implement only after the user picks:
+
+    - Check the constraints of what is already there: the CNI, cluster features, existing
+      components and conventions in the repo.
+    - Show a short comparison of the realistic options (how each works, cost, risk), with a
+      recommendation.
+    - Start implementation (or a worker) only after the user's decision.
+
+    Well-specified edits and bug fixes do not need this.
+
     # Models
 
     When you override a subagent's model, always give a full `claude-bridge/<id>` id.
