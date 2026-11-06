@@ -218,6 +218,43 @@ in
           };
         };
 
+        # Keep Docker Desktop lean: images live in the registry cache on the
+        # NAS, so anything unused for 2 days is safe to drop and re-pull.
+        # Named volumes are never touched (they hold project databases), and
+        # k3d node containers are excluded so a stopped cluster survives.
+        # `until` on containers and images is the creation time — Docker keeps
+        # no last-used timestamp — so a container created over 2 days ago is
+        # removed once stopped; `docker compose up` recreates it.
+        launchd.agents.docker-prune = {
+          enable = true;
+          config = {
+            ProgramArguments = [
+              "${pkgs.writeShellScript "docker-prune" ''
+                d=${pkgs.docker}/bin/docker
+                echo "=== $(date '+%Y-%m-%d %H:%M:%S') docker-prune ==="
+                # Never start Docker Desktop just to clean it.
+                "$d" info >/dev/null 2>&1 || { echo "docker not running, skipping"; exit 0; }
+                rc=0
+                "$d" container prune -f --filter until=48h --filter 'label!=app=k3d' || rc=1
+                "$d" image prune -af --filter until=48h || rc=1
+                "$d" builder prune -af --filter until=48h || rc=1
+                # Anonymous volumes only; named ones need `docker volume rm`.
+                "$d" volume prune -f || rc=1
+                "$d" system df
+                exit $rc
+              ''}"
+            ];
+            RunAtLoad = false;
+            # Calendar, not StartInterval: launchd runs a missed calendar job
+            # after wake, an interval job just waits for the next tick.
+            StartCalendarInterval = [ { Hour = 12; Minute = 0; } ];
+            StandardOutPath = "/Users/${user}/Library/Logs/docker-prune.log";
+            StandardErrorPath = "/Users/${user}/Library/Logs/docker-prune.log";
+            ProcessType = "Background";
+            LowPriorityIO = true;
+          };
+        };
+
         # Marked broken Oct 20, 2022 check later to remove this
         # https://github.com/nix-community/home-manager/issues/3344
         manual.manpages.enable = false;
