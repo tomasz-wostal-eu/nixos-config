@@ -1142,6 +1142,7 @@ in
 
     nushell = {
       enable = true;
+      loadSessionVariables = false; # keep legacy default (stateVersion < 26.11)
 
       # home.shellAliases is merged in too; sesh's `s` uses bash `$(...)`,
       # which nushell cannot parse, so override it with a subexpression.
