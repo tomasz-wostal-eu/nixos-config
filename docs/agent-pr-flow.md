@@ -62,6 +62,11 @@ hooks.
     Searching and reading: where is X defined, which files mention Y.
   - `worker` — `claude-sonnet-5-5`, thinking low, with `edit` and `write`.
     A well-specified change: edits, docs, mechanical refactors, running checks.
+  - `general-purpose` — overrides pi-subagents' built-in of the same name with
+    `prompt_mode: replace`, the session's model, all tools, MCP and skills. The
+    built-in appends the parent's whole pi system prompt, which names
+    `docs/custom-provider.md` and `docs/packages.md`, and pi-claude-bridge refuses
+    such a turn before it starts (`prompt-capture: refusing to send this prompt`).
 
   `~/.pi/agent/AGENTS.md` tells every pi session to delegate to them, so the main
   (Opus) context stays small, and to override a model only with a full

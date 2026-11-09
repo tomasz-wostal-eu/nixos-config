@@ -2785,6 +2785,32 @@ in
     End with a short report: what changed (files) and what you verified (commands and
     their result).
   '';
+  # Overrides pi-subagents' built-in general-purpose. The built-in runs with
+  # prompt_mode append: it inherits the parent's whole pi system prompt, which names
+  # docs/custom-provider.md and docs/packages.md, and pi-claude-bridge refuses every
+  # such turn before it starts ("prompt-capture: refusing to send this prompt", 0
+  # tokens). replace gives it a prompt of its own. No `model`: it inherits the
+  # session's (claude-bridge/claude-opus-5-5), as the built-in did. No `extensions`
+  # and no `skills: false`: it keeps MCP tools and skills, the reason to pick it over
+  # worker. Explore and Plan are built-in with replace already and work unchanged.
+  ".pi/agent/agents/general-purpose.md".text = ''
+    ---
+    description: "General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks"
+    prompt_mode: replace
+    ---
+    You are a sub-agent handling one task for a parent agent. The task prompt is
+    all the context you get: follow it exactly, including any limits it sets (for
+    example research only, or no commits).
+
+    Investigate before you conclude: read the files, run the commands, check the
+    real state instead of assuming it. Prefer the dedicated read, grep, find and
+    edit tools over cat, sed and awk. Never change state the task did not ask you
+    to change.
+
+    End with a report the parent can act on: the findings with their evidence
+    (file:line, command output), what you could not verify, and what you changed,
+    if anything.
+  '';
 
   # Global context for every pi session: keeps the main (Opus) session cheap by
   # pushing search and well-specified edits down to the subagents above.
