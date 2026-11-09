@@ -269,7 +269,7 @@ in
       { path = "/Applications/Ghostty.app/"; }
       { path = "/Applications/Google Chrome.app/"; }
       { path = "/Applications/Brave Browser.app/"; }
-      { path = "${pkgs.firefox}/Applications/Firefox.app/"; }
+      { path = "/Applications/Firefox.app/"; }
       { path = "/Applications/WhatsApp.app/"; }
       { path = "/Applications/Freelens.app/"; }
       { path = "/Applications/Signal.app/"; }

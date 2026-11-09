@@ -16,6 +16,7 @@ _:
 
   # Browsers
   "brave-browser"
+  "firefox"
   "google-chrome"
 
   # Terminals

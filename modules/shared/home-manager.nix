@@ -1413,7 +1413,13 @@ in
       };
     };
 
-    firefox.enable = true;
+    firefox = {
+      enable = true;
+      # macOS: the nixpkgs build is unsigned, so after every update macOS treats
+      # it as a different app and blocks the old profile ("missing profile").
+      # There the signed Mozilla build comes from the Homebrew cask instead.
+      package = if pkgs.stdenv.hostPlatform.isDarwin then null else pkgs.firefox;
+    };
 
     bun.enable = true;
 
