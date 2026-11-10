@@ -325,9 +325,8 @@ is skipped rather than having its tasks closed. Token: `~/.config/codeberg/token
 
 A few binaries are installed by hand and are expected on `$PATH`:
 
-- `workmux` — `nix profile install github:raine/workmux` (only its config is
-  declarative; a fresh machine needs this one command).
 - `codex`, `claude`, `gemini`, `pi` — installed via packages / casks.
+  (`workmux` is no longer here: it is a flake input, see "Main session: Claude Code".)
 - pi packages `pi-claude-bridge` and `@tintinweb/pi-subagents` (`pi install
   npm:<name>`; listed in the mutable `~/.pi/agent/settings.json`), and pi logins
   for Anthropic and OpenAI (`/login`, stored in `~/.pi/agent/auth.json`).
@@ -360,4 +359,85 @@ Two orchestration models coexist. Authoring is **workmux-orchestrated**: each
 agent is a separate CLI process in its own pane. Review is **pi-orchestrated**:
 one `pi` session spawns the reviewers as in-process sub-agents
 (pi-subagents), so the optional second reviewer is a question pi asks, not a
-pane that always starts. `pi` is also one of the runtimes `herdr` keeps alive.
+pane that always starts.
+
+## Main session: Claude Code
+
+Claude Code replaces pi as the editor's main session (CO-81; hygiene CO-83,
+guardrails and cost CO-84). pi stays installed for now: PR review still runs in it
+(see above), and its MCP file is unchanged. What replaced what:
+
+| Was | Now | Where |
+|-----|-----|-------|
+| pi's 11 MCP servers (`~/.config/mcp/mcp.json`) | the same list in Claude Code's user scope | `modules/shared/mcp-servers.nix` is the one source; `claude-code.nix` derives the Claude entries |
+| pi-mcp-adapter `approveTools = "destructive"` | `claude-guard` PreToolUse hook | `modules/shared/claude-code/claude-guard.py`, policy `guard-policy.json` |
+| nothing | Claude Code OTel to `https://otel.tailc90e09.ts.net` (DW-315) | `env` and `otelHeadersHelper` in `~/.claude/settings.json` |
+| `herdr` (package, config, hooks) | removed (CO-83); workmux hooks stay | `modules/shared/packages.nix`, `files.nix` |
+| `workmux` from `nix profile` | flake input `workmux`, pinned rev | `flake.nix`, `modules/darwin/packages.nix` |
+
+`~/.claude.json` and `~/.claude/settings.json` are mutable (Claude Code, workmux,
+impeccable and gstack write to them), so Nix never replaces them. A home-manager
+activation step (`claude-code.nix`) edits them in place and is idempotent.
+
+### MCP servers
+
+Activation runs `claude mcp add-json --scope user` per server, only when the generated
+JSON changed (stamps in `~/.local/state/claude-mcp-nix`). Claude Code has no `!cmd`
+values like pi, so secrets stay outside Nix and the store the same way, differently
+wired: stdio servers start through `bash -c 'export K="$(cmd)"; exec server'`, HTTP
+servers get a `headersHelper` that prints the bearer header from the same 0600 file.
+Slack's OAuth client secret is passed to `add-json` once through `MCP_CLIENT_SECRET`.
+
+Not added, on purpose: `atlassian` (the claude.ai Atlassian v2 connector is the one
+Jira/Confluence source; keep it, do not add a second) and `chrome` (built into Claude
+Code, `claude --chrome`). The claude.ai Google Calendar/Drive/Gmail connectors cover one
+account; `google-workspace` covers both, so they overlap on Drive/Gmail. Both stay; turn
+a connector off in claude.ai if the duplicate tools get in the way. Servers that need
+OAuth (`slack`) need `/mcp` once after the switch. The plugin entry `github@claude-plugins-official`
+(HTTP 400) is left as is: nothing proves it unused.
+
+### Guardrail hook
+
+`claude-guard` runs on every tool call, in subagents too. It answers deny (the call
+does not happen), ask (Claude Code prompts) or nothing (normal permission rules).
+
+- **Secrets, deny.** Bash commands and Read/Edit/Write/Grep/Glob paths that name
+  `.env`, `.env.*`, `*.env` (not `.example`/`.sample`/`.template`), `~/.aws`, or a
+  private key in `~/.ssh` (`.pub`, `known_hosts`, `config` are fine). Any mention
+  in a Bash command counts; `process.env` does not.
+- **Key Vault, deny unless captured.** `az keyvault secret show` is allowed only when
+  its output goes into a variable (`T=$(az ... )`, and `$T` is not echoed in the same
+  command), a file (`> file`), or `pbcopy`. Anything else would print the value into the
+  transcript. `set -x` with it is denied.
+- **git on main, deny.** `push --force`, `--force-with-lease`, `-f`, `+refspec` or
+  `--delete` aimed at main/master (explicitly, or implicitly because the checked-out
+  branch is main); on main also `rebase`, `commit --amend`, `reset` with `--hard`/
+  `--soft`/a revision, `filter-branch`, `branch -f main`. Force-pushing a feature
+  branch is fine.
+- **Destructive MCP tools, ask.** Kubernetes delete/create/apply/exec, Argo CD
+  sync/delete, n8n workflow update/delete, Home Assistant config writes, Slack posts,
+  Postiz posts. Tools listed in `mcp_allow` (glob on `mcp__server__tool`) skip the
+  prompt; the list is empty. Read tools are untouched.
+
+Every deny/ask is one JSON line in `~/.local/state/claude-guard/blocks.jsonl` (time,
+decision, rule, tool, session, agent, cwd, command up to 300 chars). It is a string-level
+guard, not a sandbox: `eval`, base64 and `cd dir && cat file` tricks get past it. An
+internal error lets the call through.
+
+Test: `tests/claude-guard/run.sh [path/to/claude-guard]` feeds `cases.jsonl` (allow, deny
+and ask samples) to the script and compares the decisions.
+
+### Telemetry
+
+`env` in settings.json turns on metrics, logs and traces (beta) over OTLP
+`http/protobuf` (the headers helper does not work with grpc) with
+`vendor=anthropic,host.name=<host>`; `session.id` is on every datapoint by default and
+is the run id. `claude-otel-headers` reads Key Vault `kv-driftwardendev`
+`otel-agent-ingest-token` into `~/.local/state/claude-otel/ingest-token` (0600) when
+the file is missing or older than 12 h (`CLAUDE_OTEL_TOKEN_TTL`, seconds), and
+falls back to the stale token when `az` fails.
+
+### Pins
+
+`flake.lock` pins `claude-code`, `codex` and `antigravity-cli` (nixpkgs) and `workmux`
+(its own input, rev in `flake.nix`). They move only with `nix flake update`.

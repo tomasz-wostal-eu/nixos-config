@@ -73,6 +73,9 @@ in
         lazyvim,
         ...
       }:
+      let
+        claudeCode = import ../shared/claude-code.nix { inherit pkgs lib; };
+      in
       {
         home = {
           enableNixpkgsReleaseCheck = false;
@@ -80,7 +83,9 @@ in
           file = lib.mkMerge [
             sharedFiles
             additionalFiles
+            claudeCode.files
           ];
+          activation.claudeCode = claudeCode.activation;
           stateVersion = "23.11";
           shellAliases = shared.shellAliases;
           sessionPath = [ "$HOME/.local/bin" ];

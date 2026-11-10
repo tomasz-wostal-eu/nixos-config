@@ -31,6 +31,11 @@
       url = "github:pfassina/lazyvim-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Was `nix profile install github:raine/workmux`; the lock now pins it.
+    workmux = {
+      url = "github:raine/workmux/16c9ecb5da576d68d93946a430dd471b7405a60d";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -45,6 +50,7 @@
       nixpkgs,
       disko,
       lazyvim,
+      workmux,
     }@inputs:
     let
       user = "twostal";
@@ -123,6 +129,7 @@
           specialArgs = inputs;
           modules = [
             home-manager.darwinModules.home-manager
+            { nixpkgs.overlays = [ (final: _: { workmux = workmux.packages.${system}.default; }) ]; }
             {
               home-manager = {
                 useGlobalPkgs = true;
