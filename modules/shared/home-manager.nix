@@ -630,6 +630,25 @@ in
         init.defaultBranch = "main";
         commit.gpgsign = true;
         tag.gpgsign = true;
+        # Auto maintenance is spawned detached by commit/fetch/merge and dies with
+        # the agent session that ran git, leaving maintenance.lock and tmp_obj_*
+        # behind. The scheduled run below replaces it (and the auto gc with it).
+        maintenance.auto = false;
+      };
+      maintenance = {
+        enable = true;
+        repositories =
+          let
+            home = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/${user}" else "/home/${user}";
+          in
+          map (r: "${home}/projects/${r}") [
+            "second-brain"
+            "wostal-eu"
+            "publishing-queue"
+            "drift-warden"
+            "content-ops"
+            "nixos-config"
+          ];
       };
     };
 
