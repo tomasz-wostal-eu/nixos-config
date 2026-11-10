@@ -52,7 +52,10 @@ hooks.
   Both are defined in `modules/shared/files.nix` (`piReviewer`), land in
   `~/.pi/agent/agents/`, run `isolated` (built-in tools only, no MCP or skills)
   and write `.workmux/review-<model>.md`. The Ollama base URL is one binding,
-  `ollamaUrl`, shared by pi's `models.json` and `pi-ollama-up`.
+  `ollamaUrl` (`modules/shared/ollama.nix`), shared by pi's `models.json` and
+  `pi-ollama-up`. On darwin it is `http://127.0.0.1:11435`, a launchd relay
+  (`tech.mistwolf.ollama-relay`, `/usr/bin/nc`) to the LAN box, because macOS Local
+  Network Privacy blocks Nix-built processes; Linux goes direct.
 - General-purpose sub-agents for any pi session, all on the Claude subscription
   (`claude-bridge/...`). They load only the `pi-claude-bridge` extension and no
   skills rather than running `isolated`: an isolated sub-agent loads no

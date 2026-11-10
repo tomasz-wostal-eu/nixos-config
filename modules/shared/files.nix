@@ -100,7 +100,8 @@ let
 
   # Ollama on the LAN box: pi's provider (models.json) and the pi-ollama-up probe
   # both come from here. The reviewer model is the one pr-review needs to be there.
-  ollamaUrl = "http://192.168.1.37:11434";
+  # On darwin the URL is the local relay, see ollama.nix.
+  inherit (import ./ollama.nix { inherit pkgs; }) ollamaUrl;
   ollamaReviewModel = "qwen3-coder:30b-32k";
 
   # Argo Workflows UIs that CI statuses link to, and how pr-ci reaches each one:

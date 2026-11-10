@@ -9,6 +9,7 @@
 let
   user = "twostal";
   sharedFiles = import ../shared/files.nix { inherit config pkgs; };
+  ollama = import ../shared/ollama.nix { inherit pkgs; };
   additionalFiles = import ./files.nix { inherit user config pkgs; };
   shared = import ../shared/home-manager.nix { inherit config pkgs lib; };
 in
@@ -225,6 +226,27 @@ in
         # `until` on containers and images is the creation time — Docker keeps
         # no last-used timestamp — so a container created over 2 days ago is
         # removed once stopped; `docker compose up` recreates it.
+        # Relay 127.0.0.1:ollamaRelayPort to the Ollama box on the LAN. launchd
+        # accepts each connection and runs nc with it as stdin/stdout. nc is an
+        # Apple binary, so Local Network Privacy lets it through (see ollama.nix).
+        launchd.agents.ollama-relay = {
+          enable = true;
+          config = {
+            Label = "tech.mistwolf.ollama-relay";
+            ProgramArguments = [
+              "/usr/bin/nc"
+              ollama.ollamaLanHost
+              ollama.ollamaLanPort
+            ];
+            inetdCompatibility.Wait = false;
+            Sockets.Listeners = {
+              SockNodeName = "127.0.0.1";
+              SockServiceName = ollama.ollamaRelayPort;
+              SockType = "stream";
+            };
+          };
+        };
+
         launchd.agents.docker-prune = {
           enable = true;
           config = {
