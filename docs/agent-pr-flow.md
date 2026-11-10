@@ -195,8 +195,17 @@ prompt still come from `pr-review`.
 
 ### 3. Post the review to the PR
 
-After the reviewers have written their `.workmux/review-*.md` files, press **`P`**
-in the dashboard, or run:
+Posting is automatic. `pr-review` starts a detached watcher (`nohup`, log
+`.workmux/review-watch.log` in the review worktree) that polls every 15 s. Once
+every `.workmux/review-*.md` has been unchanged for a minute (a reviewer writes its
+review in one call, so that means it is finished), the watcher runs
+`agent-review-post -y .` and each file is posted as a signed comment. It stops when
+something was posted, nothing is left and no sub-agent is `working`, or after 2 h at
+most (a stalled reviewer stays `working` for ever). `pr-review --quick` does the same
+inline: it waits until the review is written, then posts it.
+
+To post by hand (a failed post, or a review you edited first), press **`P`** in the
+dashboard, or run:
 
 ```sh
 agent-review-post "$(workmux path pr-42)"   # previews each review, asks before posting
@@ -205,8 +214,8 @@ agent-review-post -y .                       # post all without prompting
 
 Each review is shown, then (unless `-y`) you confirm before it is posted as a
 signed comment. The signature is the model from the file name, e.g.
-`**gpt-6-astra**`. A posted file is renamed `*.md.posted`; a failed post is kept for
-a retry. Posting is deliberately a manual step — it is visible on the forge.
+`**gpt-6-astra**`. A posted file is renamed `*.md.posted`, so nothing is posted
+twice; a failed post is kept for a retry. Posts are visible on the forge.
 
 ### 4. Check CI and deployment
 
@@ -324,7 +333,10 @@ A few binaries are installed by hand and are expected on `$PATH`:
 
 - `workmux` — `nix profile install github:raine/workmux` (only its config is
   declarative; a fresh machine needs this one command).
-- `codex`, `claude`, `gemini`, `pi` — installed via packages / casks.
+- `codex`, `claude`, `pi` — installed via packages / casks. `gemini-cli` is
+  installed on Linux only (`modules/shared/packages.nix`); Google limits it to Code
+  Assist Standard/Enterprise, and Antigravity CLI (`agy`) replaced it on
+  2026-06-18. `agy` is not installed here.
 - pi packages `pi-claude-bridge` and `@tintinweb/pi-subagents` (`pi install
   npm:<name>`; listed in the mutable `~/.pi/agent/settings.json`), and pi logins
   for Anthropic and OpenAI (`/login`, stored in `~/.pi/agent/auth.json`).
