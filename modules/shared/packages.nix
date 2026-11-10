@@ -3,6 +3,10 @@
 with pkgs;
 [
   age
+  # Antigravity CLI (`agy`, unfree; allowUnfree is set in modules/shared/default.nix).
+  # Login is interactive on first run (`agy`); nothing is stored in the Nix store.
+  # workmux auto-detects `agy` (prompt injection, status), no integration needed.
+  antigravity-cli
   ansible
   ansible-lint
   argo-rollouts
