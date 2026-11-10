@@ -1,0 +1,84 @@
+{"name": "ls and git status", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "git status && ls -la"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "process.env in code", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "grep -rn process.env src/"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": ".env.example is a template", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "cat .env.example"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "ssh public key", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "cat ~/.ssh/id_ed25519.pub"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "ssh known_hosts", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "grep github ~/.ssh/known_hosts"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "list ~/.ssh dir", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "ls ~/.ssh"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "aws cli without touching ~/.aws", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "aws s3 ls --profile dev"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Read ordinary file", "expect": "allow", "input": {"tool_name": "Read", "tool_input": {"file_path": "/Users/x/proj/README.md"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Read .env.example", "expect": "allow", "input": {"tool_name": "Read", "tool_input": {"file_path": "/Users/x/proj/.env.example"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "cat .env", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "cat .env"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "source .env", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "set -a; . ./.env; set +a"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "head app/.env.local", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "head -5 app/.env.local"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "grep over *.env", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "grep KEY *.env"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "deadman env", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "cat ~/.config/content-deadman.env"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "redirect from .env", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "wc -l < .env"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "cat aws credentials", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "cat ~/.aws/credentials"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "ls ~/.aws/", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "ls $HOME/.aws/"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "ssh private key", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "cat ~/.ssh/id_ed25519"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "ssh key glob", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "cat ~/.ssh/*"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "ssh -i key", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "ssh -i ~/.ssh/id_rsa host"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Read .env", "expect": "deny", "input": {"tool_name": "Read", "tool_input": {"file_path": "/Users/x/proj/.env"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Read prod.env", "expect": "deny", "input": {"tool_name": "Read", "tool_input": {"file_path": "/Users/x/proj/prod.env"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Read aws config", "expect": "deny", "input": {"tool_name": "Read", "tool_input": {"file_path": "~/.aws/config"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Read ssh key", "expect": "deny", "input": {"tool_name": "Read", "tool_input": {"file_path": "/Users/x/.ssh/id_rsa"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Edit .env", "expect": "deny", "input": {"tool_name": "Edit", "tool_input": {"file_path": "/Users/x/proj/.env", "old_string": "a", "new_string": "b"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Grep in .env glob", "expect": "deny", "input": {"tool_name": "Grep", "tool_input": {"pattern": "KEY", "glob": "*.env"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Grep path ~/.aws", "expect": "deny", "input": {"tool_name": "Grep", "tool_input": {"pattern": "KEY", "path": "/Users/x/.aws"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Glob **/*.env", "expect": "deny", "input": {"tool_name": "Glob", "tool_input": {"pattern": "**/*.env"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv into variable", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "TOKEN=$(az keyvault secret show --vault-name kv --name t --query value -o tsv) && curl -sH \"Authorization: Bearer $TOKEN\" https://x"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv export into variable", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "export GRAFANA_TOKEN=\"$(az keyvault secret show --vault-name kv --name t --query value -o tsv)\""}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv redirected to file", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "az keyvault secret show --vault-name kv --name t --query value -o tsv > /tmp/t && chmod 600 /tmp/t"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv with stderr dropped to file", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "az keyvault secret show --vault-name kv --name t --query value -o tsv 2>/dev/null > /tmp/t"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv to pbcopy", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "az keyvault secret show --vault-name kv --name t --query value -o tsv | pbcopy"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv secret list is names only", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "az keyvault secret list --vault-name kv -o table"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv bare", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "az keyvault secret show --vault-name kv --name t"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv tsv to stdout", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "az keyvault secret show --vault-name kv --name t --query value -o tsv"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv piped to cat", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "az keyvault secret show --vault-name kv --name t -o tsv | cat"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv via tee", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "az keyvault secret show --vault-name kv --name t -o tsv | tee /tmp/t"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv in echo", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "echo \"$(az keyvault secret show --vault-name kv --name t --query value -o tsv)\""}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv assigned then echoed", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "T=$(az keyvault secret show --vault-name kv --name t --query value -o tsv); echo $T"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv under set -x", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "set -x; T=$(az keyvault secret show --vault-name kv --name t --query value -o tsv)"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kv stderr redirect only", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "az keyvault secret show --vault-name kv --name t -o tsv 2>&1"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "plain push on feature branch", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "git push origin feat/x"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "force-with-lease on feature branch", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "git push --force-with-lease origin feat/CO-84-x"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "force push feature, no refspec", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "git push --force"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "plain push main", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "git push origin main"}, "cwd": "@MAIN@", "session_id": "s1"}}
+{"name": "commit on main", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'fix: x'"}, "cwd": "@MAIN@", "session_id": "s1"}}
+{"name": "reset unstage on main", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "git reset -- file.txt"}, "cwd": "@MAIN@", "session_id": "s1"}}
+{"name": "rebase on feature branch", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "git rebase origin/main"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "amend on feature branch", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit --amend --no-edit"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "commit message mentioning force push", "expect": "allow", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit -m 'docs: never git push --force main'"}, "cwd": "@MAIN@", "session_id": "s1"}}
+{"name": "force push main explicit", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git push --force origin main"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "force-with-lease main", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git push --force-with-lease origin main"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "-f main", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git push -f origin main"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "plus refspec main", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git push origin +main"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "HEAD:main from feature", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git push -f origin HEAD:main"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "force push on main, no refspec", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git push --force"}, "cwd": "@MAIN@", "session_id": "s1"}}
+{"name": "force push chained", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git fetch && git push --force-with-lease origin main"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "git -C force main", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git -C /tmp/r push -f origin master"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "delete remote main", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git push origin --delete main"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "rebase on main", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git rebase -i HEAD~3"}, "cwd": "@MAIN@", "session_id": "s1"}}
+{"name": "amend on main", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git commit --amend"}, "cwd": "@MAIN@", "session_id": "s1"}}
+{"name": "reset hard on main", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git reset --hard origin/main"}, "cwd": "@MAIN@", "session_id": "s1"}}
+{"name": "reset HEAD~1 on main", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git reset HEAD~1"}, "cwd": "@MAIN@", "session_id": "s1"}}
+{"name": "filter-branch", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git filter-branch --tree-filter 'rm x' HEAD"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "branch -f main", "expect": "deny", "input": {"tool_name": "Bash", "tool_input": {"command": "git branch -f main abc1234"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "MCP read: kubernetes list", "expect": "allow", "input": {"tool_name": "mcp__kubernetes__pods_list", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "MCP read: argocd list", "expect": "allow", "input": {"tool_name": "mcp__argocd__list_applications", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "MCP read: slack search", "expect": "allow", "input": {"tool_name": "mcp__slack__slack_search_public", "tool_input": {"query": "x"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "MCP read: n8n get", "expect": "allow", "input": {"tool_name": "mcp__n8n__n8n_get_workflow", "tool_input": {"id": "1"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "MCP read: ha entity state", "expect": "allow", "input": {"tool_name": "mcp__ha-mcp__ha_get_state", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "MCP unrelated server write", "expect": "allow", "input": {"tool_name": "mcp__atlassian__createJiraIssue", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kubernetes resources_delete", "expect": "ask", "input": {"tool_name": "mcp__kubernetes__resources_delete", "tool_input": {"name": "x"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "kubernetes create_or_update", "expect": "ask", "input": {"tool_name": "mcp__kubernetes__resources_create_or_update", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "argocd sync", "expect": "ask", "input": {"tool_name": "mcp__argocd__sync_application", "tool_input": {"applicationName": "x"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "argocd delete", "expect": "ask", "input": {"tool_name": "mcp__argocd__delete_application", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "n8n update workflow", "expect": "ask", "input": {"tool_name": "mcp__n8n__n8n_update_full_workflow", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "n8n delete workflow", "expect": "ask", "input": {"tool_name": "mcp__n8n__n8n_delete_workflow", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "HA config write", "expect": "ask", "input": {"tool_name": "mcp__ha-mcp__ha_config_set_automation", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "HA call service", "expect": "ask", "input": {"tool_name": "mcp__ha-mcp__ha_call_service", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Slack post", "expect": "ask", "input": {"tool_name": "mcp__slack__slack_send_message", "tool_input": {"text": "hi"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Slack connector post", "expect": "ask", "input": {"tool_name": "mcp__claude_ai_Slack__slack_send_message", "tool_input": {"text": "hi"}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "Postiz create post", "expect": "ask", "input": {"tool_name": "mcp__postiz__createPost", "tool_input": {}, "cwd": "@FEAT@", "session_id": "s1"}}
+{"name": "WebFetch", "expect": "allow", "input": {"tool_name": "WebFetch", "tool_input": {"url": "https://example.com"}, "cwd": "@FEAT@", "session_id": "s1"}}

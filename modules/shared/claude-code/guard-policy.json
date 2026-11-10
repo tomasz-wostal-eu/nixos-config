@@ -1,0 +1,35 @@
+{
+  "mcp_gates": [
+    {
+      "server": "kubernetes",
+      "tool": "delete|create|apply|exec|run|scale|install|uninstall|patch|update|annotate|label",
+      "why": "changes the cluster"
+    },
+    {
+      "server": "argocd",
+      "tool": "sync|delete|create|update|terminate|rollback|run_resource_action|patch",
+      "why": "syncs or changes Argo CD applications"
+    },
+    {
+      "server": "n8n",
+      "tool": "update|delete|autofix|create|activate|deactivate",
+      "why": "edits or deletes n8n workflows"
+    },
+    {
+      "server": "ha-mcp|home-assistant",
+      "tool": "config_set|config_remove|_set_|_remove|_delete|_update|_create|call_service|reload|restart|install|rename",
+      "why": "writes Home Assistant configuration or runs services"
+    },
+    {
+      "server": "slack",
+      "tool": "send|post|schedule|create|update|delete|react",
+      "why": "posts to Slack"
+    },
+    {
+      "server": "postiz",
+      "tool": "create|schedule|post|update|delete",
+      "why": "publishes or changes social posts"
+    }
+  ],
+  "mcp_allow": []
+}
