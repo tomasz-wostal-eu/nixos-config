@@ -127,7 +127,14 @@ mistwolf-dev create token`, caches it in `$XDG_CACHE_HOME/argo-cli/token`
 argo login    # mint a fresh token now, print its expiry
 argo logout   # drop the cached token
 argo list     # in Nushell: a table, e.g. `argo list | where status == Failed`
+argo -w submit --from cronwf/content-calendar --watch   # write, see below
 ```
+
+The `argo-cli` token is read-only, so `submit`, `retry`, `stop`, `terminate`,
+`delete` and `cron suspend` are refused. `argo -w <command>` runs that one
+command without the server and the token, straight against the Kubernetes API
+as the kubeconfig's own identity on context `mistwolf-dev`, and says so on
+stderr. A mutating command without `-w` is still refused.
 
 The wrapper steps aside when `ARGO_SERVER` is already set and for
 `version`/`completion`/`help`. In Nushell `argo list` returns a table only

@@ -123,8 +123,19 @@ in
         # reused from a 0600 cache file for 55 min; namespace argo-workflows
         # unless ARGO_NAMESPACE or -n says otherwise. `argo login` mints a fresh
         # token, `argo logout` drops it. A shell that sets ARGO_SERVER itself
-        # bypasses all of this.
+        # bypasses all of this. `argo -w <command>` is the one way to write
+        # (submit, retry, stop, terminate, delete, cron suspend): it leaves the
+        # server and the read-only token out and talks to the Kubernetes API
+        # with the kubeconfig's own identity on context mistwolf-dev. Without
+        # -w a mutating command is still refused, which is the point.
         argo() {
+          if [[ $1 == -w ]]; then
+            shift
+            (( $# )) || { print -u2 "argo: -w needs a command"; return 2 }
+            print -u2 "argo: write mode, kubeconfig context mistwolf-dev"
+            ARGO_NAMESPACE=''${ARGO_NAMESPACE:-argo-workflows} command argo --context mistwolf-dev "$@"
+            return
+          fi
           if [[ -n $ARGO_SERVER || $# -eq 0 || $1 == (version|completion|help|-h|--help) ]]; then
             command argo "$@"
             return
@@ -1349,9 +1360,21 @@ in
         }
 
         # argo CLI against mistwolf-dev, same behaviour as the zsh argo()
-        # function: a cached 1 h argo-cli token, reused for 55 min.
+        # function: a cached 1 h argo-cli token, reused for 55 min, and
+        # `argo -w <command>` to write with the kubeconfig's own identity.
         @complete external
         def --wrapped argo [...args] {
+            if ($args | is-not-empty) and $args.0 == "-w" {
+                let rest = ($args | skip 1)
+                if ($rest | is-empty) {
+                    error make --unspanned { msg: "argo: -w needs a command" }
+                }
+                print -e "argo: write mode, kubeconfig context mistwolf-dev"
+                with-env { ARGO_NAMESPACE: ($env.ARGO_NAMESPACE? | default "argo-workflows") } {
+                    ^argo --context mistwolf-dev ...$rest
+                }
+                return
+            }
             if ($env.ARGO_SERVER? | is-not-empty) or ($args | is-empty) or ($args.0 in ["version" "completion" "help" "-h" "--help"]) {
                 ^argo ...$args
                 return
