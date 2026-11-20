@@ -31,3 +31,6 @@ secrets/
 mkdir
 npm
 CLAUDE.md
+
+# workmux keeps review files and agent state here (CO-88)
+.workmux/
