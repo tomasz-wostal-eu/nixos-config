@@ -56,6 +56,26 @@ let
     tailscale = "completion zsh"; # tailscale-app cask
   };
 
+  # Cask/brew CLIs whose generator prints a bash script (picocli: even
+  # `completion zsh` does); sourced through bashcompinit.
+  externalBash = {
+    floci = "completion bash"; # floci-io/floci brew
+  };
+
+  # Commands carapace knows but completes worse than the tool itself, so zsh
+  # keeps the tool's own (generated) completion:
+  # - wt: carapace's `wt` is another tool of that name (switch/merge/step),
+  #   not timvw/wt (checkout/create/pr/...).
+  # - atuin: carapace's spec lags (no threads/output/resume/mcp); atuin's
+  #   clap completion always matches the installed version.
+  carapaceExcludes = [
+    "wt"
+    "atuin"
+  ];
+
+  eza = "${pkgs.eza}/bin/eza";
+  bat = "${pkgs.bat}/bin/bat";
+
   forPackage =
     pkg:
     pkgs.runCommand "zsh-completions-${pkg.pname or pkg.name}"
@@ -151,7 +171,20 @@ let
   };
 in
 {
-  programs.zsh.initContent = lib.mkOrder 550 ''
+  # Nushell gets every completion from carapace. Bridges let carapace fall
+  # back to the zsh/fish/bash completions of commands it has no spec for
+  # (codex, workmux, sesh, floci, flux, ...). Case-insensitive matching.
+  programs.nushell.environmentVariables = {
+    CARAPACE_BRIDGES = "zsh,fish,bash";
+    CARAPACE_MATCH = "1";
+  };
+
+  programs.zsh.initContent = lib.mkMerge [
+    (lib.mkOrder 550 ''
+    # Read by `carapace _carapace zsh` below, so set before it runs.
+    export CARAPACE_EXCLUDES=${lib.concatStringsSep "," carapaceExcludes}
+    export CARAPACE_MATCH=1
+
     # Generated completions (modules/shared/completions.nix); before compinit.
     fpath=(${generated}/share/zsh/generated-completions $fpath)
     path=(${generated}/bin $path)
@@ -169,5 +202,60 @@ in
         '') external
       )}
     }
-  '';
+  '')
+
+    # After compinit, fzf's completion.zsh, carapace and the shell functions.
+    (lib.mkOrder 1500 ''
+      # floci & co. ship bash completion only (externalBash): cached, sourced
+      # through bashcompinit, regenerated when the binary is newer.
+      (( $+functions[complete] )) || { autoload -U bashcompinit && bashcompinit; }
+      () {
+        local dir=''${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions bin
+        mkdir -p $dir
+        ${lib.concatStrings (
+          lib.mapAttrsToList (c: g: ''
+            bin=''${commands[${c}]:-}
+            if [[ -n $bin ]]; then
+              if [[ ! -s $dir/${c}.bash || $bin -nt $dir/${c}.bash ]]; then
+                $bin ${g} > $dir/${c}.bash 2> /dev/null || rm -f $dir/${c}.bash
+              fi
+              [[ -s $dir/${c}.bash ]] && source $dir/${c}.bash
+            fi
+          '') externalBash
+        )}
+      }
+
+      # azcfg (home-manager.nix) takes floci|prv; awscfg completes itself.
+      _azcfg() { compadd floci prv; }
+      compdef _azcfg azcfg
+
+      # fzf-tab: Tab opens fzf over the completions, with preview; `<` and `>`
+      # switch between groups (commands, flags, files, ...). It replaces
+      # zsh's menu, so menu select is off and group headers are plain [%d].
+      source ${pkgs.zsh-fzf-tab}/share/fzf-tab/fzf-tab.plugin.zsh
+      zstyle ':completion:*' menu no
+      zstyle ':completion:*:descriptions' format '[%d]'
+      zstyle ':completion:*' group-name '''
+      zstyle ':completion:*:git-checkout:*' sort false
+      zstyle ':fzf-tab:*' switch-group '<' '>'
+      zstyle ':fzf-tab:*' use-fzf-default-opts no
+      # Catppuccin Macchiato.
+      zstyle ':fzf-tab:*' fzf-flags --height=50% \
+        --color=bg+:#363a4f,bg:-1,spinner:#f4dbd6,hl:#ed8796,fg:#cad3f5 \
+        --color=header:#ed8796,info:#c6a0f6,pointer:#f4dbd6,marker:#f4dbd6 \
+        --color=fg+:#cad3f5,prompt:#c6a0f6,hl+:#ed8796,border:#6e738d,gutter:-1
+      # Inside tmux, a popup instead of the lines under the prompt.
+      [[ -n $TMUX ]] && zstyle ':fzf-tab:*' fzf-command ftb-tmux-popup
+      zstyle ':fzf-tab:*' popup-min-size 80 12
+      # Previews: directories as a listing, files with bat, git refs as a log,
+      # processes with ps.
+      zstyle ':fzf-tab:complete:(cd|z|ls|eza|cat|bat|less|nvim|vim|cp|mv|rm|open):*' fzf-preview \
+        '[[ -d $realpath ]] && ${eza} -1 --color=always --icons=always $realpath || ${bat} --color=always --style=plain --line-range=:80 $realpath 2>/dev/null'
+      zstyle ':fzf-tab:complete:git-(checkout|switch|log|rebase|merge|diff|show|branch):*' fzf-preview \
+        'git log --oneline --graph --color=always --max-count=40 $word 2>/dev/null'
+      zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-preview 'ps -p $word -o pid,%cpu,%mem,command'
+      zstyle ':fzf-tab:complete:(kill|ps):argument-rest' fzf-flags --preview-window=down:3:wrap
+    '')
+  ];
 }
+

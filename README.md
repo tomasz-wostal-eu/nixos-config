@@ -208,6 +208,34 @@ The CLI side lives outside the repo, as mutable state each tool owns:
 Client libraries ignore the CLI configuration; for them use `eval "$(floci
 env)"`, `floci az env` or `floci gcp env` in a throwaway shell.
 
+### Completions
+
+Three sources, in this order of preference:
+
+1. **carapace** completes about a thousand commands from its own specs (git,
+   kubectl, aws, gcloud, az, terraform, helm, docker, nix, gh, tea, ...).
+   `CARAPACE_EXCLUDES` keeps it off the ones it gets wrong: `wt` (carapace
+   knows another tool of that name) and `atuin` (its spec lags behind the
+   installed version). `CARAPACE_MATCH=1` matches case-insensitively.
+2. **Generated zsh completions** (`modules/shared/completions.nix`) for every
+   package that ships none, regenerated when it is bumped; for cask/brew CLIs
+   (`external`) into `~/.cache/zsh/completions` when the binary is newer.
+   CLIs that only print bash completion (`externalBash`, e.g. floci) are
+   cached the same way and sourced through `bashcompinit`.
+3. **Shell functions**: `awscfg` (configured profiles) and `azcfg`
+   (`floci`/`prv`).
+
+Tab opens **fzf-tab**: fzf over the candidates, Catppuccin colours, a tmux
+popup inside tmux. `<` and `>` switch between groups (commands, flags, files,
+...). Previews: directories as an `eza` listing and files with `bat` (for cd,
+ls, cat, nvim, cp, mv, rm, ...), git refs as a log, processes with `ps`. fzf's
+own `**<Tab>` trigger is gone, since fzf-tab owns Tab.
+
+Nushell takes every completion from carapace; `CARAPACE_BRIDGES=zsh,fish,bash`
+lets it fall back to the zsh/fish/bash completion of commands carapace has no
+spec for (codex, workmux, sesh, ...). Bash-only completions outside the
+bash-completion directories (floci) are not reachable there.
+
 ### `kubectl ctx` / `kubectl ns`
 
 `kubectx` and `kubens` from nixpkgs are also installed as `kubectl-ctx` and
