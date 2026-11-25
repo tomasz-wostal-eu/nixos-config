@@ -114,6 +114,53 @@ in
         # wt shell integration (worktree manager)
         command -v wt &>/dev/null && source <(wt shellenv)
 
+        # The Azure CLI has no named configurations like gcloud. `azcfg floci`
+        # points this shell at the floci-az emulator: its own config dir
+        # ~/.azure-floci (logged in once with floci's dev service principal)
+        # and a CA bundle that trusts the emulator's certificate. `azcfg prv`
+        # goes back to the real ~/.azure.
+        azcfg() {
+          case "$1" in
+            floci)
+              export AZURE_CONFIG_DIR="$HOME/.azure-floci"
+              export REQUESTS_CA_BUNDLE="$HOME/.azure-floci/ca-bundle.pem"
+              ;;
+            prv)
+              unset AZURE_CONFIG_DIR REQUESTS_CA_BUNDLE
+              ;;
+            *)
+              echo "usage: azcfg floci|prv" >&2
+              return 1
+              ;;
+          esac
+        }
+
+        # Same switch for AWS: `awscfg <profile>` sets AWS_PROFILE in this shell
+        # (floci = the local emulator; any other configured profile works too,
+        # with tab completion). `awscfg prv` uses a profile named prv if one
+        # exists, otherwise drops AWS_PROFILE. Every switch first drops the
+        # variables `eval "$(floci env)"` exports (static keys, endpoint,
+        # region): they would override whatever profile is selected.
+        awscfg() {
+          if [[ -z "$1" ]]; then
+            echo "usage: awscfg floci|prv|<profile>" >&2
+            return 1
+          fi
+          local profiles
+          profiles=("''${(@f)$(aws configure list-profiles 2>/dev/null)}")
+          if (( ''${profiles[(Ie)$1]} )) || [[ "$1" == prv ]]; then
+            unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
+              AWS_ENDPOINT_URL AWS_DEFAULT_REGION AWS_REGION AWS_PROFILE
+            (( ''${profiles[(Ie)$1]} )) && export AWS_PROFILE="$1"
+            return 0
+          else
+            echo "awscfg: no AWS profile '$1' (have: ''${profiles[*]})" >&2
+            return 1
+          fi
+        }
+        _awscfg() { compadd prv ''${(f)"$(aws configure list-profiles 2>/dev/null)"}; }
+        compdef _awscfg awscfg
+
         # Completions come from site-functions (packages + modules/shared/completions.nix)
         # and carapace, not from `source <(x completion zsh)` at every startup.
 
@@ -227,33 +274,140 @@ in
       enableZshIntegration = true;
       enableNushellIntegration = true;
       settings = {
+        # Plain coloured text, no powerline bar: "dir on branch via k8s on
+        # cloud took 5s", prompt character on the next line. Colours come from
+        # Catppuccin Macchiato (github.com/catppuccin/starship).
         add_newline = false;
-        format = "$directory$character";
         palette = "catppuccin_macchiato";
-        right_format = "$all";
         command_timeout = 1000;
-        character = {
-          success_symbol = "[➜](bold green)";
-          vicmd_symbol = "[N] >>>";
-        };
-        directory.substitutions = {
-          "~/tests/starship-custom" = "work-project";
-        };
-        git_branch.format = "[$symbol$branch(:$remote_branch)]($style)";
-        aws = {
-          format = "[$symbol(profile: \"$profile\" )(\\(region: $region\\) )]($style)";
-          disabled = true;
-          style = "bold blue";
-          symbol = " ";
-        };
-        golang.format = "[ ](bold cyan)";
-        kubernetes = {
-          symbol = "☸ ";
-          disabled = false;
-          format = "[$symbol$context( \\($namespace\\))]($style) ";
-        };
-        docker_context.disabled = false;
+        format = lib.concatStrings [
+          "$username$hostname"
+          "$directory$direnv"
+          "$git_branch$git_status"
+          "$kubernetes$docker_context$container"
+          "$aws$gcloud$azure"
+          "$cmd_duration$battery"
+          "$line_break$character"
+        ];
 
+        # Only shown over SSH or as root.
+        username = {
+          style_user = "yellow";
+          style_root = "bold red";
+          format = "[$user]($style)";
+        };
+        hostname = {
+          style = "yellow";
+          format = "[@$hostname]($style) in ";
+        };
+
+        directory = {
+          style = "bold lavender";
+          format = "[$path]($style)[$read_only]($read_only_style) ";
+          truncation_length = 3;
+          truncation_symbol = "…/";
+        };
+        direnv = {
+          disabled = false;
+          style = "yellow";
+          format = "([$loaded$allowed]($style) )";
+          loaded_msg = "";
+          unloaded_msg = "";
+          allowed_msg = "";
+          not_allowed_msg = " ";
+          denied_msg = " ";
+        };
+
+        git_branch = {
+          symbol = "";
+          style = "bold mauve";
+          format = "on [$symbol $branch]($style) ";
+        };
+        git_status = {
+          style = "red";
+          format = "([$all_status$ahead_behind]($style) )";
+        };
+
+        # Many contexts: EKS ARNs and GKE ids collapse to the cluster name.
+        kubernetes = {
+          disabled = false;
+          symbol = "󱃾";
+          style = "blue";
+          format = "via [$symbol $context( \\($namespace\\))]($style) ";
+          contexts = [
+            {
+              context_pattern = "arn:aws:eks:[^:]+:[0-9]+:cluster/(?P<cluster>.+)";
+              context_alias = "eks:$cluster";
+            }
+            {
+              context_pattern = "gke_[^_]+_[^_]+_(?P<cluster>.+)";
+              context_alias = "gke:$cluster";
+            }
+          ];
+        };
+        # Shown for any non-default context, not only next to compose files.
+        docker_context = {
+          symbol = "";
+          only_with_files = false;
+          style = "blue";
+          format = "via [$symbol $context]($style) ";
+        };
+        container = {
+          symbol = "⬢";
+          style = "teal";
+          format = "in [$symbol $name]($style) ";
+        };
+
+        # Many accounts per provider: show the profile/account/subscription
+        # name only (gcloud: active configuration), plus SSO expiry for AWS.
+        aws = {
+          symbol = "";
+          style = "peach";
+          format = "on [$symbol $profile( \\[$duration\\])]($style) ";
+          expiration_symbol = "⌛";
+          # `aws login` keeps its session where starship does not look, so
+          # without this a selected profile (awscfg prv) would stay hidden.
+          force_display = true;
+        };
+        gcloud = {
+          symbol = "󱇶";
+          style = "sapphire";
+          format = "on [$symbol $active( \\($project\\))]($style) ";
+        };
+        azure = {
+          disabled = false;
+          symbol = "";
+          style = "sky";
+          format = "on [$symbol $subscription]($style) ";
+          subscription_aliases = {
+            "devops-toys" = "prv";
+            "floci-az local" = "floci";
+          };
+        };
+
+        cmd_duration = {
+          style = "yellow";
+          format = "took [$duration]($style) ";
+        };
+        battery.display = [
+          {
+            threshold = 20;
+            style = "bold red";
+          }
+          {
+            threshold = 40;
+            style = "yellow";
+          }
+        ];
+
+        line_break.disabled = false;
+        character = {
+          success_symbol = "[❯](bold green)";
+          error_symbol = "[❯](bold red)";
+          vimcmd_symbol = "[❮](bold green)";
+        };
+
+        # https://github.com/catppuccin/starship/blob/main/themes/macchiato.toml
         palettes.catppuccin_macchiato = {
           rosewater = "#f4dbd6";
           flamingo = "#f0c6c6";

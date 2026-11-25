@@ -88,6 +88,13 @@ with pkgs;
   kubectl-view-allocations
   kubectl-view-secret
   kubectx # kubectx + kubens, behind the kc/kns aliases
+  # The same binaries as kubectl plugins, so `kubectl ctx` / `kubectl ns` work
+  # (what krew's ctx/ns plugins install). Completion stays with kubectx/kubens.
+  (runCommand "kubectl-ctx-ns" { } ''
+    mkdir -p $out/bin
+    ln -s ${kubectx}/bin/kubectx $out/bin/kubectl-ctx
+    ln -s ${kubectx}/bin/kubens $out/bin/kubectl-ns
+  '')
   kubelogin
   kubelogin-oidc
   kubeseal

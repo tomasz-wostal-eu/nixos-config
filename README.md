@@ -140,6 +140,81 @@ The wrapper steps aside when `ARGO_SERVER` is already set and for
 `version`/`completion`/`help`. In Nushell `argo list` returns a table only
 without `-o`/`--output`.
 
+### Prompt
+
+Starship, two lines, plain coloured text in Catppuccin Macchiato (palette from
+[catppuccin/starship](https://github.com/catppuccin/starship)):
+
+```
+…/nixos-config on  main ! via 󱃾 mistwolf-dev on  prv on 󱇶 prv on  prv took 5s
+❯
+```
+
+Left to right: user@host (only over SSH or as root), directory, direnv, git
+branch and status, kubernetes context (namespace in parentheses), docker
+context (any non-default one), container, then one segment per cloud: AWS
+profile, gcloud configuration (project in parentheses), Azure subscription.
+Command duration and battery (at 40 % or less) close the line. A module with
+nothing to show disappears completely.
+
+There are many accounts per provider, so each cloud shows one short name:
+
+- Kubernetes: EKS ARNs show as `eks:<cluster>`, GKE ids as `gke:<cluster>`.
+- AWS: the profile name, no region; SSO expiry in `[...]` when there is one.
+  `force_display` is on because starship does not see `aws login` sessions.
+- gcloud: the active configuration name.
+- Azure: the subscription name through `subscription_aliases`
+  (`devops-toys` → `prv`, `floci-az local` → `floci`).
+
+### Cloud accounts and the floci emulators
+
+Every provider has a real account called `prv` and a `floci` one pointing at the
+local [floci](https://floci.io) emulators (`brew` formula
+`floci-io/floci/floci`; `floci start`, `floci az start`, `floci gcp start`).
+The switch only affects the current shell, except for gcloud:
+
+| Provider | Real | Emulator | Mechanism |
+|----------|------|----------|-----------|
+| AWS | `awscfg prv` | `awscfg floci` | Sets `AWS_PROFILE`; any other profile name works too, with completion |
+| Azure | `azcfg prv` | `azcfg floci` | Sets `AZURE_CONFIG_DIR` and the emulator's CA bundle, or unsets them |
+| gcloud | `gcloud config configurations activate prv` | `... activate floci` | Named gcloud configurations (global) |
+
+`awscfg` first drops `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+`AWS_SESSION_TOKEN`, `AWS_ENDPOINT_URL`, `AWS_DEFAULT_REGION` and `AWS_REGION`:
+`eval "$(floci env)"` exports static keys and an endpoint that would win over
+any profile. `awscfg prv` falls back to no profile when no `prv` profile
+exists. Both functions are zsh only.
+
+The CLI side lives outside the repo, as mutable state each tool owns:
+
+- **AWS**: profile `floci` (keys `test`/`test`, `endpoint_url
+  http://localhost.floci.io:4566`, path-style S3), created with `aws configure
+  set ... --profile floci`. Profile `prv` comes from `aws login --profile prv`
+  (console session, approved in the browser); run it again when the session
+  expires.
+- **Azure**: `~/.azure-floci`, a separate `AZURE_CONFIG_DIR` with cloud
+  `floci-az` at `https://localhost:4577` (the emulator's certificate is valid
+  for `localhost`, not `localhost.floci.io`), logged in with floci's dev service
+  principal, and `ca-bundle.pem` = system roots + `/_floci/tls-cert`. Starship
+  only reads that `azureProfile.json` when it has an `installationId`; add one by
+  hand if the Azure segment disappears after a fresh login.
+- **gcloud**: configuration `floci` with project `floci-local`, a fake token in
+  `auth/access_token_file` and `api_endpoint_overrides/*` for storage,
+  secretmanager, cloudkms, iam, cloudscheduler, container, serviceusage and
+  pubsub (the set from floci-gcp's `bin/gcplocal`). Upload from a file:
+  `gcloud storage cp -` from stdin and `rm -r` on a bucket fail against the
+  emulator.
+
+Client libraries ignore the CLI configuration; for them use `eval "$(floci
+env)"`, `floci az env` or `floci gcp env` in a throwaway shell.
+
+### `kubectl ctx` / `kubectl ns`
+
+`kubectx` and `kubens` from nixpkgs are also installed as `kubectl-ctx` and
+`kubectl-ns`, so `kubectl ctx <context>` and `kubectl ns <namespace>` work
+without krew. They change `current-context` in the kubeconfig, so every shell
+sees the switch. The `kc`/`kns` aliases still work.
+
 ## pi
 
 pi is the agent harness for PR review and
