@@ -284,6 +284,45 @@ in
           };
         };
 
+        # Watchdog for the local k3d cluster (drift-warden DW-372). From 21.11 to
+        # 25.11 its containers ran but k3s did not listen (the server node had
+        # come back on another address), and every arm64 build fell back to
+        # Hetzner without anyone noticing. Every 15 minutes this runs
+        # `k3d-local.sh repair` from drift-warden's origin/main: silent while the
+        # API answers or the cluster is stopped on purpose; otherwise it restarts
+        # the cluster in order and logs what it saw. The script is read from
+        # origin/main, not copied here, so there is one copy of the logic.
+        launchd.agents.k3d-watchdog = {
+          enable = true;
+          config = {
+            ProgramArguments = [
+              "${pkgs.writeShellScript "k3d-watchdog" ''
+                export PATH="${pkgs.docker}/bin:${pkgs.curl}/bin:${pkgs.git}/bin:${pkgs.coreutils}/bin:/usr/bin:/bin"
+                repo="$HOME/projects/drift-warden"
+                docker info >/dev/null 2>&1 || exit 0   # Docker Desktop not running: nothing to watch
+                git -C "$repo" fetch -q origin main 2>/dev/null || true   # offline: use the last fetched main
+                tmp=$(mktemp)
+                trap 'rm -f "$tmp"' EXIT
+                if ! git -C "$repo" show origin/main:scripts/local/k3d-local.sh > "$tmp" 2>/dev/null; then
+                  echo "=== $(date '+%Y-%m-%d %H:%M:%S') k3d-watchdog: no scripts/local/k3d-local.sh on drift-warden origin/main ==="
+                  exit 1
+                fi
+                out=$(bash "$tmp" repair 2>&1); rc=$?
+                if [ -n "$out" ] || [ "$rc" -ne 0 ]; then
+                  echo "=== $(date '+%Y-%m-%d %H:%M:%S') k3d-watchdog (exit $rc) ==="
+                  printf '%s\n' "$out"
+                fi
+                exit $rc
+              ''}"
+            ];
+            RunAtLoad = true;
+            StartInterval = 900;
+            StandardOutPath = "/Users/${user}/Library/Logs/k3d-watchdog.log";
+            StandardErrorPath = "/Users/${user}/Library/Logs/k3d-watchdog.log";
+            ProcessType = "Background";
+          };
+        };
+
         # Weekly cleanup of the caches that grow without bound on this laptop:
         # Nix generations and the store paths only they kept alive, the uv
         # cache and the pnpm store. Each step is independent, so one missing
