@@ -97,6 +97,10 @@ flake.nix              # Entry point
 ## Features
 
 - Zsh with oh-my-zsh, plus Nushell; both get starship, atuin, carapace, zoxide and direnv
+- Two-line starship prompt with one short name per cloud; `awscfg`/`azcfg` switch between real
+  accounts (`prv`) and the local floci emulators (see [Shells](#shells))
+- Completions from carapace plus generated ones, fzf-tab on Tab with previews
+- atuin with the daemon, output capture, agent threads and agent hooks, searchable over MCP
 - LazyVim (Neovim) with LSP support
 - Catppuccin Macchiato theme everywhere (Ghostty, tmux, pi, terminal apps)
 - Ghostty terminal (90% opacity, background blur)
