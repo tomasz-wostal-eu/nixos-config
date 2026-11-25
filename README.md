@@ -215,6 +215,34 @@ env)"`, `floci az env` or `floci gcp env` in a throwaway shell.
 without krew. They change `current-context` in the kubeconfig, so every shell
 sees the switch. The `kc`/`kns` aliases still work.
 
+### atuin
+
+Shell history in atuin, synced through api.atuin.sh (end-to-end encrypted; the
+key is in your password manager, `atuin key` prints it). Up arrow stays with
+the shell, ctrl-r opens atuin:
+
+- **Daemon** (`daemon.enabled`, `autostart`): atuin starts it itself, on macOS
+  as the launchd agent `~/Library/LaunchAgents/sh.atuin.daemon.plist`. It writes
+  history, syncs (offline too) and serves `search_mode = "daemon-fuzzy"`,
+  ranked by frequency and recency. `atuin daemon status` / `restart`.
+- **Filter**: starts at `workspace` (the current git/jj repo); ctrl-r cycles
+  through directory, global, host, session.
+- **tmux popup**: inside tmux the search opens in an 80 %×60 % popup (zsh;
+  Nushell stays inline). `ATUIN_TMUX_POPUP=false` turns it off for a shell.
+- **vim keymap**: starts in normal mode; block cursor in normal, bar in insert.
+- **Secrets**: atuin's built-in `secrets_filter` drops commands with known key
+  formats. `history_filter` adds SonarQube tokens (`sq[apu]_…`, `sonar.token=`,
+  `--sonar-token`) and any `*token=`, `*password=`, `*secret=`, `*api_key=`
+  with a literal value; such commands are never recorded. A value taken from a
+  variable (`=$X`, `=$(...)`) is still recorded. `security.redact_patterns`
+  holds the same patterns, but in 18.24.8 it does not affect shell history.
+- **Agent threads** (`threads.capture`): conversations of Claude Code, pi,
+  codex and others are captured: `atuin threads search <text>`,
+  `atuin threads show latest`, `atuin resume`. `atuin threads import` pulls in
+  the ones from before.
+- **MCP**: `atuin mcp` is in `modules/shared/mcp-servers.nix`, so Claude Code
+  and pi can search the history.
+
 ## pi
 
 pi is the agent harness for PR review and

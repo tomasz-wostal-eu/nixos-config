@@ -52,6 +52,8 @@
 #   creating and scheduling posts), streamable HTTP with the public API key
 #   as a bearer token. The key sits in a 0600 file; the source is Key Vault
 #   kv-driftwardendev (postiz-public-api-key).
+# - atuin: `atuin mcp`, search over the shell history (and captured agent
+#   threads) on this machine, stdio. Read-only; no credentials of its own.
 {
   atlassian = {
     url = "https://mcp.atlassian.com/v1/mcp";
@@ -139,6 +141,11 @@
       N8N_API_URL = "https://n8n.mistwolf.tech";
       N8N_API_KEY = "!cat \"$HOME/.config/n8n/api-key\"";
     };
+    approveTools = "destructive";
+  };
+  atuin = {
+    command = "${pkgs.atuin}/bin/atuin";
+    args = [ "mcp" ];
     approveTools = "destructive";
   };
   postiz = {

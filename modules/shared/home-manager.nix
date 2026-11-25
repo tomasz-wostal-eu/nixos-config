@@ -225,10 +225,52 @@ in
       settings = {
         auto_sync = true;
         sync_frequency = "5m";
-        search_mode = "fuzzy";
+        # In-memory search in the daemon, ranked by frequency and recency.
+        search_mode = "daemon-fuzzy";
+        # Inside a git/jj repo ctrl-r starts with that repo's commands; press
+        # ctrl-r again to cycle through directory, ..., global.
+        filter_mode = "workspace";
+        workspaces = true;
         style = "full";
         enter_accept = false;
         keymap_mode = "vim-normal";
+        keymap_cursor = {
+          vim_normal = "steady-block";
+          vim_insert = "blink-bar";
+          emacs = "blink-block";
+        };
+        # The daemon writes history, syncs (also offline) and serves
+        # daemon-fuzzy. autostart: atuin keeps it running itself, on macOS as
+        # the launchd agent ~/Library/LaunchAgents/sh.atuin.daemon.plist.
+        daemon = {
+          enabled = true;
+          autostart = true;
+        };
+        # Search in a tmux popup (zsh only; Nushell stays inline).
+        tmux = {
+          enabled = true;
+          width = "80%";
+          height = "60%";
+        };
+        # Capture coding agents' threads (Claude Code, pi, codex, ...):
+        # `atuin threads search|show|resume`.
+        threads.capture = true;
+        # secrets_filter (on by default) drops commands with AWS/GitHub/
+        # Stripe/... keys, but not SonarQube tokens or ad-hoc `FOO_TOKEN=value`.
+        # history_filter drops those too (never recorded, never synced).
+        # A value starting with $ (a variable) is fine and stays recorded.
+        history_filter = [
+          "sq[apu]_[0-9a-f]{40}"
+          "(?i)(?:sonar[.-]token|--sonar-token|-Dsonar\\.login)[= ][^\\s\"'$]"
+          "(?i)[\\w.-]*(?:token|password|passwd|secret|api_?key)=[^\\s\"'$(]"
+        ];
+        # redact_patterns does not touch shell history in 18.24.8 (tested);
+        # kept for what atuin does redact (captured threads and output).
+        security.redact_patterns = [
+          "(?P<secret>sq[apu]_[0-9a-f]{40})"
+          "(?i)(?:sonar[.-]token|--sonar-token|-Dsonar\\.login)[= ](?P<secret>[^\\s\"'$][^\\s\"']*)"
+          "(?i)[\\w.-]*(?:token|password|passwd|secret|api_?key)=(?P<secret>[^\\s\"'$(][^\\s\"']*)"
+        ];
         theme = {
           name = "catppuccin-macchiato-blue";
         };
