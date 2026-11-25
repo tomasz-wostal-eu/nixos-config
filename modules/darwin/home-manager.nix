@@ -37,6 +37,10 @@ in
         name = "timvw/tap";
         trusted = true;
       }
+      {
+        name = "floci-io/floci";
+        trusted = true;
+      }
     ];
     brews = pkgs.callPackage ./brews.nix { };
     casks = pkgs.callPackage ./casks.nix { };
