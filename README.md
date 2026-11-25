@@ -229,7 +229,8 @@ the shell, ctrl-r opens atuin:
   through directory, global, host, session.
 - **tmux popup**: inside tmux the search opens in an 80 %×60 % popup (zsh;
   Nushell stays inline). `ATUIN_TMUX_POPUP=false` turns it off for a shell.
-- **vim keymap**: starts in normal mode; block cursor in normal, bar in insert.
+- **vim keymap**: starts in insert mode (type right away, Esc for normal);
+  bar cursor in insert, block in normal. Compact style, no boxes or tabs.
 - **Secrets**: atuin's built-in `secrets_filter` drops commands with known key
   formats. `history_filter` adds SonarQube tokens (`sq[apu]_…`, `sonar.token=`,
   `--sonar-token`) and any `*token=`, `*password=`, `*secret=`, `*api_key=`

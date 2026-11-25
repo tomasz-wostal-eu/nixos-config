@@ -231,9 +231,11 @@ in
         # ctrl-r again to cycle through directory, ..., global.
         filter_mode = "workspace";
         workspaces = true;
-        style = "full";
+        # No boxes or tabs around the list, just the results and the query.
+        style = "compact";
         enter_accept = false;
-        keymap_mode = "vim-normal";
+        # Start typing right away; Esc switches to vim normal mode.
+        keymap_mode = "vim-insert";
         keymap_cursor = {
           vim_normal = "steady-block";
           vim_insert = "blink-bar";
