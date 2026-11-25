@@ -218,8 +218,8 @@ sees the switch. The `kc`/`kns` aliases still work.
 ### atuin
 
 Shell history in atuin, synced through api.atuin.sh (end-to-end encrypted; the
-key is in your password manager, `atuin key` prints it). Up arrow stays with
-the shell, ctrl-r opens atuin:
+key is in your password manager, `atuin key` prints it). ctrl-r and the up
+arrow both open atuin; the up arrow starts with the current terminal's session:
 
 - **Daemon** (`daemon.enabled`, `autostart`): atuin starts it itself, on macOS
   as the launchd agent `~/Library/LaunchAgents/sh.atuin.daemon.plist`. It writes
@@ -243,6 +243,16 @@ the shell, ctrl-r opens atuin:
   the ones from before.
 - **MCP**: `atuin mcp` is in `modules/shared/mcp-servers.nix`, so Claude Code
   and pi can search the history.
+- **Agent hooks**: every shell command Claude Code, codex and pi run is
+  recorded with the agent as author (Bash tool calls only, with exit code and
+  duration). ctrl-r hides them; `atuin search --author '$all-agent' -- ''`
+  lists them, `--author claude-code` one agent's. The same filters apply, so
+  literal secrets are not recorded either. The hooks are written by `atuin hook
+  install <agent>` from the `atuinAgentHooks` activation
+  (`modules/darwin/home-manager.nix`) on every switch: Claude's
+  `settings.json`, codex's `hooks.json` (plus the trust hashes in its
+  `config.toml`) and `~/.pi/agent/extensions/atuin.ts` are mutable, and
+  re-running leaves the other hooks alone.
 
 ## pi
 

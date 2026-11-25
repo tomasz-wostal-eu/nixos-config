@@ -221,7 +221,6 @@ in
       enable = true;
       enableZshIntegration = true;
       enableNushellIntegration = true;
-      flags = [ "--disable-up-arrow" ];
       settings = {
         auto_sync = true;
         sync_frequency = "5m";
@@ -230,6 +229,8 @@ in
         # Inside a git/jj repo ctrl-r starts with that repo's commands; press
         # ctrl-r again to cycle through directory, ..., global.
         filter_mode = "workspace";
+        # Up arrow walks this terminal's own history first, like the shell's.
+        filter_mode_shell_up_key_binding = "session";
         workspaces = true;
         # No boxes or tabs around the list, just the results and the query.
         style = "compact";
