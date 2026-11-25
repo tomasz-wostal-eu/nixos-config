@@ -91,144 +91,210 @@ in
     zsh = {
       enable = true;
       oh-my-zsh.enable = true;
-      initContent = ''
-        # Fix TERM for SSH connections from Ghostty
-        if [[ -n "$SSH_CONNECTION" ]] && [[ "$TERM" == "xterm-ghostty" ]]; then
-          export TERM=xterm-256color
-        fi
-
-        # GPG TTY for signing over SSH
-        export GPG_TTY=$(tty)
-
-        path+=("$HOME/.cache/npm/global/bin/")
-        if [[ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
-          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-            . /nix/var/nix/profiles/default/etc/profile.d/nix.sh
+      initContent = lib.mkMerge [
+        # atuin output capture: the shell re-execs under `atuin pty-proxy`, which
+        # records each command's output for the daemon. First thing in .zshrc,
+        # so only the shell inside the proxy runs the rest. It skips `zsh -c`,
+        # scripts, and shells already inside a proxy.
+        (lib.mkOrder 90 ''
+          eval "$(${pkgs.atuin}/bin/atuin pty-proxy init zsh)"
+        '')
+        ''
+          # Fix TERM for SSH connections from Ghostty
+          if [[ -n "$SSH_CONNECTION" ]] && [[ "$TERM" == "xterm-ghostty" ]]; then
+            export TERM=xterm-256color
+          fi
+  
+          # GPG TTY for signing over SSH
+          export GPG_TTY=$(tty)
+  
+          path+=("$HOME/.cache/npm/global/bin/")
+          if [[ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
+            . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+              . /nix/var/nix/profiles/default/etc/profile.d/nix.sh
+              fi
+  
+          # Homebrew on Apple Silicon (puts /opt/homebrew/bin on PATH)
+          if [[ -x /opt/homebrew/bin/brew ]]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+          fi
+  
+          # wt shell integration (worktree manager)
+          command -v wt &>/dev/null && source <(wt shellenv)
+  
+          # The Azure CLI has no named configurations like gcloud. `azcfg floci`
+          # points this shell at the floci-az emulator: its own config dir
+          # ~/.azure-floci (logged in once with floci's dev service principal)
+          # and a CA bundle that trusts the emulator's certificate. `azcfg prv`
+          # goes back to the real ~/.azure.
+          azcfg() {
+            case "$1" in
+              floci)
+                export AZURE_CONFIG_DIR="$HOME/.azure-floci"
+                export REQUESTS_CA_BUNDLE="$HOME/.azure-floci/ca-bundle.pem"
+                ;;
+              prv)
+                unset AZURE_CONFIG_DIR REQUESTS_CA_BUNDLE
+                ;;
+              *)
+                echo "usage: azcfg floci|prv" >&2
+                return 1
+                ;;
+            esac
+          }
+  
+          # Same switch for AWS: `awscfg <profile>` sets AWS_PROFILE in this shell
+          # (floci = the local emulator; any other configured profile works too,
+          # with tab completion). `awscfg prv` uses a profile named prv if one
+          # exists, otherwise drops AWS_PROFILE. Every switch first drops the
+          # variables `eval "$(floci env)"` exports (static keys, endpoint,
+          # region): they would override whatever profile is selected.
+          awscfg() {
+            if [[ -z "$1" ]]; then
+              echo "usage: awscfg floci|prv|<profile>" >&2
+              return 1
             fi
-
-        # Homebrew on Apple Silicon (puts /opt/homebrew/bin on PATH)
-        if [[ -x /opt/homebrew/bin/brew ]]; then
-          eval "$(/opt/homebrew/bin/brew shellenv)"
-        fi
-
-        # wt shell integration (worktree manager)
-        command -v wt &>/dev/null && source <(wt shellenv)
-
-        # The Azure CLI has no named configurations like gcloud. `azcfg floci`
-        # points this shell at the floci-az emulator: its own config dir
-        # ~/.azure-floci (logged in once with floci's dev service principal)
-        # and a CA bundle that trusts the emulator's certificate. `azcfg prv`
-        # goes back to the real ~/.azure.
-        azcfg() {
-          case "$1" in
-            floci)
-              export AZURE_CONFIG_DIR="$HOME/.azure-floci"
-              export REQUESTS_CA_BUNDLE="$HOME/.azure-floci/ca-bundle.pem"
-              ;;
-            prv)
-              unset AZURE_CONFIG_DIR REQUESTS_CA_BUNDLE
-              ;;
-            *)
-              echo "usage: azcfg floci|prv" >&2
+            local profiles
+            profiles=("''${(@f)$(aws configure list-profiles 2>/dev/null)}")
+            if (( ''${profiles[(Ie)$1]} )) || [[ "$1" == prv ]]; then
+              unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
+                AWS_ENDPOINT_URL AWS_DEFAULT_REGION AWS_REGION AWS_PROFILE
+              (( ''${profiles[(Ie)$1]} )) && export AWS_PROFILE="$1"
+              return 0
+            else
+              echo "awscfg: no AWS profile '$1' (have: ''${profiles[*]})" >&2
               return 1
-              ;;
-          esac
-        }
-
-        # Same switch for AWS: `awscfg <profile>` sets AWS_PROFILE in this shell
-        # (floci = the local emulator; any other configured profile works too,
-        # with tab completion). `awscfg prv` uses a profile named prv if one
-        # exists, otherwise drops AWS_PROFILE. Every switch first drops the
-        # variables `eval "$(floci env)"` exports (static keys, endpoint,
-        # region): they would override whatever profile is selected.
-        awscfg() {
-          if [[ -z "$1" ]]; then
-            echo "usage: awscfg floci|prv|<profile>" >&2
-            return 1
-          fi
-          local profiles
-          profiles=("''${(@f)$(aws configure list-profiles 2>/dev/null)}")
-          if (( ''${profiles[(Ie)$1]} )) || [[ "$1" == prv ]]; then
-            unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
-              AWS_ENDPOINT_URL AWS_DEFAULT_REGION AWS_REGION AWS_PROFILE
-            (( ''${profiles[(Ie)$1]} )) && export AWS_PROFILE="$1"
-            return 0
-          else
-            echo "awscfg: no AWS profile '$1' (have: ''${profiles[*]})" >&2
-            return 1
-          fi
-        }
-        _awscfg() { compadd prv ''${(f)"$(aws configure list-profiles 2>/dev/null)"}; }
-        compdef _awscfg awscfg
-
-        # Completions come from site-functions (packages + modules/shared/completions.nix)
-        # and carapace, not from `source <(x completion zsh)` at every startup.
-
-        # argo CLI against the client-mode argo-server of mistwolf-dev
-        # (drift-warden docs/argo-cli.md). Each call carries a 1 h token of the
-        # read-only ServiceAccount argo-cli, minted with kubectl when needed and
-        # reused from a 0600 cache file for 55 min; namespace argo-workflows
-        # unless ARGO_NAMESPACE or -n says otherwise. `argo login` mints a fresh
-        # token, `argo logout` drops it. A shell that sets ARGO_SERVER itself
-        # bypasses all of this. `argo -w <command>` is the one way to write
-        # (submit, retry, stop, terminate, delete, cron suspend): it leaves the
-        # server and the read-only token out and talks to the Kubernetes API
-        # with the kubeconfig's own identity on context mistwolf-dev. Without
-        # -w a mutating command is still refused, which is the point.
-        argo() {
-          if [[ $1 == -w ]]; then
-            shift
-            (( $# )) || { print -u2 "argo: -w needs a command"; return 2 }
-            print -u2 "argo: write mode, kubeconfig context mistwolf-dev"
-            ARGO_NAMESPACE=''${ARGO_NAMESPACE:-argo-workflows} command argo --context mistwolf-dev "$@"
-            return
-          fi
-          if [[ -n $ARGO_SERVER || $# -eq 0 || $1 == (version|completion|help|-h|--help) ]]; then
-            command argo "$@"
-            return
-          fi
-          zmodload -F zsh/stat b:zstat
-          zmodload -F zsh/datetime b:strftime
-          local cache=''${XDG_CACHE_HOME:-$HOME/.cache}/argo-cli/token
-          case $1 in
-            logout) rm -f $cache && print -u2 "argo: token dropped"; return ;;
-            login) rm -f $cache ;;
-          esac
-          local -a fresh=( $cache(N.mm-55) )
-          if (( ! $#fresh )); then
-            local token
-            token=$(kubectl --context mistwolf-dev -n argo-workflows create token argo-cli --duration=1h) || {
-              print -u2 "argo: could not mint an argo-cli token (kubectl context mistwolf-dev)"
-              return 1
-            }
-            mkdir -p -m 700 ''${cache:h}
-            (umask 077 && print -r -- $token >| $cache)
-          fi
-          if [[ $1 == login ]]; then
-            local -a st
-            zstat -A st +mtime $cache
-            print -u2 "argo: argo-cli token valid until $(strftime %H:%M $(( st[1] + 3600 )))"
-            return
-          fi
-          ARGO_SERVER=workflows-cli.tailc90e09.ts.net:443 ARGO_HTTP1=true ARGO_SECURE=true \
-            ARGO_NAMESPACE=''${ARGO_NAMESPACE:-argo-workflows} ARGO_TOKEN="Bearer $(<$cache)" \
-            command argo "$@"
-        }
-      '';
+            fi
+          }
+          _awscfg() { compadd prv ''${(f)"$(aws configure list-profiles 2>/dev/null)"}; }
+          compdef _awscfg awscfg
+  
+          # Completions come from site-functions (packages + modules/shared/completions.nix)
+          # and carapace, not from `source <(x completion zsh)` at every startup.
+  
+          # argo CLI against the client-mode argo-server of mistwolf-dev
+          # (drift-warden docs/argo-cli.md). Each call carries a 1 h token of the
+          # read-only ServiceAccount argo-cli, minted with kubectl when needed and
+          # reused from a 0600 cache file for 55 min; namespace argo-workflows
+          # unless ARGO_NAMESPACE or -n says otherwise. `argo login` mints a fresh
+          # token, `argo logout` drops it. A shell that sets ARGO_SERVER itself
+          # bypasses all of this. `argo -w <command>` is the one way to write
+          # (submit, retry, stop, terminate, delete, cron suspend): it leaves the
+          # server and the read-only token out and talks to the Kubernetes API
+          # with the kubeconfig's own identity on context mistwolf-dev. Without
+          # -w a mutating command is still refused, which is the point.
+          argo() {
+            if [[ $1 == -w ]]; then
+              shift
+              (( $# )) || { print -u2 "argo: -w needs a command"; return 2 }
+              print -u2 "argo: write mode, kubeconfig context mistwolf-dev"
+              ARGO_NAMESPACE=''${ARGO_NAMESPACE:-argo-workflows} command argo --context mistwolf-dev "$@"
+              return
+            fi
+            if [[ -n $ARGO_SERVER || $# -eq 0 || $1 == (version|completion|help|-h|--help) ]]; then
+              command argo "$@"
+              return
+            fi
+            zmodload -F zsh/stat b:zstat
+            zmodload -F zsh/datetime b:strftime
+            local cache=''${XDG_CACHE_HOME:-$HOME/.cache}/argo-cli/token
+            case $1 in
+              logout) rm -f $cache && print -u2 "argo: token dropped"; return ;;
+              login) rm -f $cache ;;
+            esac
+            local -a fresh=( $cache(N.mm-55) )
+            if (( ! $#fresh )); then
+              local token
+              token=$(kubectl --context mistwolf-dev -n argo-workflows create token argo-cli --duration=1h) || {
+                print -u2 "argo: could not mint an argo-cli token (kubectl context mistwolf-dev)"
+                return 1
+              }
+              mkdir -p -m 700 ''${cache:h}
+              (umask 077 && print -r -- $token >| $cache)
+            fi
+            if [[ $1 == login ]]; then
+              local -a st
+              zstat -A st +mtime $cache
+              print -u2 "argo: argo-cli token valid until $(strftime %H:%M $(( st[1] + 3600 )))"
+              return
+            fi
+            ARGO_SERVER=workflows-cli.tailc90e09.ts.net:443 ARGO_HTTP1=true ARGO_SECURE=true \
+              ARGO_NAMESPACE=''${ARGO_NAMESPACE:-argo-workflows} ARGO_TOKEN="Bearer $(<$cache)" \
+              command argo "$@"
+          }
+        ''
+      ];
     };
 
     atuin = {
       enable = true;
       enableZshIntegration = true;
       enableNushellIntegration = true;
-      flags = [ "--disable-up-arrow" ];
       settings = {
         auto_sync = true;
         sync_frequency = "5m";
-        search_mode = "fuzzy";
-        style = "full";
+        # In-memory search in the daemon, ranked by frequency and recency.
+        search_mode = "daemon-fuzzy";
+        # Inside a git/jj repo ctrl-r starts with that repo's commands; press
+        # ctrl-r again to cycle through directory, ..., global.
+        filter_mode = "workspace";
+        # Up arrow walks this terminal's own history first, like the shell's.
+        filter_mode_shell_up_key_binding = "session";
+        workspaces = true;
+        # No boxes or tabs around the list, just the results and the query.
+        style = "compact";
         enter_accept = false;
-        keymap_mode = "vim-normal";
+        # Start typing right away; Esc switches to vim normal mode.
+        keymap_mode = "vim-insert";
+        keymap_cursor = {
+          vim_normal = "steady-block";
+          vim_insert = "blink-bar";
+          emacs = "blink-block";
+        };
+        # The daemon writes history, syncs (also offline) and serves
+        # daemon-fuzzy. autostart: atuin keeps it running itself, on macOS as
+        # the launchd agent ~/Library/LaunchAgents/sh.atuin.daemon.plist.
+        daemon = {
+          enabled = true;
+          autostart = true;
+        };
+        # Search in a tmux popup (zsh only; Nushell stays inline).
+        tmux = {
+          enabled = true;
+          width = "80%";
+          height = "60%";
+        };
+        # Output capture: the pty proxy (started at the top of .zshrc) marks
+        # each command's output and the daemon stores it, locally only (never
+        # synced). ctrl-o in search opens it; `atuin output search <text>`.
+        # Full-screen apps (vim, less, k9s) are skipped, progress bars keep
+        # their last frame, secrets are redacted (secrets_filter).
+        pty_proxy.enabled = true;
+        output = {
+          enabled = true;
+          max_output_size = "1MB";
+          # The default is 10 % of the disk.
+          max_disk_usage = "5GB";
+        };
+        # Capture coding agents' threads (Claude Code, pi, codex, ...):
+        # `atuin threads search|show|resume`.
+        threads.capture = true;
+        # secrets_filter (on by default) drops commands with AWS/GitHub/
+        # Stripe/... keys, but not SonarQube tokens or ad-hoc `FOO_TOKEN=value`.
+        # history_filter drops those too (never recorded, never synced).
+        # A value starting with $ (a variable) is fine and stays recorded.
+        history_filter = [
+          "sq[apu]_[0-9a-f]{40}"
+          "(?i)(?:sonar[.-]token|--sonar-token|-Dsonar\\.login)[= ][^\\s\"'$]"
+          "(?i)[\\w.-]*(?:token|password|passwd|secret|api_?key)=[^\\s\"'$(]"
+        ];
+        # redact_patterns does not touch shell history in 18.24.8 (tested);
+        # kept for what atuin does redact (captured threads and output).
+        security.redact_patterns = [
+          "(?P<secret>sq[apu]_[0-9a-f]{40})"
+          "(?i)(?:sonar[.-]token|--sonar-token|-Dsonar\\.login)[= ](?P<secret>[^\\s\"'$][^\\s\"']*)"
+          "(?i)[\\w.-]*(?:token|password|passwd|secret|api_?key)=(?P<secret>[^\\s\"'$(][^\\s\"']*)"
+        ];
         theme = {
           name = "catppuccin-macchiato-blue";
         };

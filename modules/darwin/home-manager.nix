@@ -90,6 +90,27 @@ in
             claudeCode.files
           ];
           activation.claudeCode = claudeCode.activation;
+          # atuin's agent hooks: every shell command Claude Code, codex and pi
+          # run lands in atuin history with the agent as author (hidden from
+          # ctrl-r by default; `atuin search --author '$all-agent'`). atuin
+          # writes them itself: claude's settings.json and codex's hooks.json
+          # (plus the trust hashes codex keeps in config.toml) are mutable, and
+          # re-running leaves other hooks alone. Run through the stable profile
+          # path, which is what atuin writes into the hook commands.
+          activation.atuinAgentHooks = lib.hm.dag.entryAfter [ "writeBoundary" "claudeCode" ] ''
+            atuin_bin="/etc/profiles/per-user/$USER/bin/atuin"
+            [ -x "$atuin_bin" ] || atuin_bin="${config.programs.atuin.package}/bin/atuin"
+            for agent_dir in claude-code:.claude codex:.codex pi:.pi/agent; do
+              agent=''${agent_dir%%:*}
+              [ -d "$HOME/''${agent_dir#*:}" ] || continue
+              if [ -n "''${DRY_RUN:-}" ]; then
+                echo "atuin: would install hooks for $agent"
+              else
+                "$atuin_bin" hook install "$agent" >/dev/null 2>&1 \
+                  || echo "atuin: hook install for $agent failed" >&2
+              fi
+            done
+          '';
           stateVersion = "23.11";
           shellAliases = shared.shellAliases;
           sessionPath = [ "$HOME/.local/bin" ];
