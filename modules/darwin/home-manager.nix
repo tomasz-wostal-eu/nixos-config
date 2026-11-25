@@ -224,13 +224,6 @@ in
           };
         };
 
-        # Keep Docker Desktop lean: images live in the registry cache on the
-        # NAS, so anything unused for 2 days is safe to drop and re-pull.
-        # Named volumes are never touched (they hold project databases), and
-        # k3d node containers are excluded so a stopped cluster survives.
-        # `until` on containers and images is the creation time — Docker keeps
-        # no last-used timestamp — so a container created over 2 days ago is
-        # removed once stopped; `docker compose up` recreates it.
         # Relay 127.0.0.1:ollamaRelayPort to the Ollama box on the LAN. launchd
         # accepts each connection and runs nc with it as stdin/stdout. nc is an
         # Apple binary, so Local Network Privacy lets it through (see ollama.nix).
@@ -252,6 +245,15 @@ in
           };
         };
 
+        # Keep Docker Desktop lean: images live in the registry cache on the
+        # NAS, so anything unused for 2 days is safe to drop and re-pull.
+        # k3d node containers are excluded so a stopped cluster survives.
+        # `until` on containers and images is the creation time (Docker keeps
+        # no last-used timestamp), so a container created over 2 days ago is
+        # removed once stopped; `docker compose up` recreates it.
+        # Unused named volumes are removed too, decided 24.11: a volume no
+        # container uses, a stopped compose stack's database included, is gone
+        # on the next run. Keep data you need outside Docker volumes.
         launchd.agents.docker-prune = {
           enable = true;
           config = {
@@ -265,8 +267,8 @@ in
                 "$d" container prune -f --filter until=48h --filter 'label!=app=k3d' || rc=1
                 "$d" image prune -af --filter until=48h || rc=1
                 "$d" builder prune -af --filter until=48h || rc=1
-                # Anonymous volumes only; named ones need `docker volume rm`.
-                "$d" volume prune -f || rc=1
+                # -a: named volumes as well, not only anonymous ones.
+                "$d" volume prune -af || rc=1
                 "$d" system df
                 exit $rc
               ''}"
@@ -277,6 +279,38 @@ in
             StartCalendarInterval = [ { Hour = 12; Minute = 0; } ];
             StandardOutPath = "/Users/${user}/Library/Logs/docker-prune.log";
             StandardErrorPath = "/Users/${user}/Library/Logs/docker-prune.log";
+            ProcessType = "Background";
+            LowPriorityIO = true;
+          };
+        };
+
+        # Weekly cleanup of the caches that grow without bound on this laptop:
+        # Nix generations and the store paths only they kept alive, the uv
+        # cache and the pnpm store. Each step is independent, so one missing
+        # tool does not skip the others. System generations (root) stay with
+        # `nix run .#clean`.
+        launchd.agents.disk-cleanup = {
+          enable = true;
+          config = {
+            ProgramArguments = [
+              "${pkgs.writeShellScript "disk-cleanup" ''
+                export PATH="${pkgs.coreutils}/bin:/etc/profiles/per-user/${user}/bin:/run/current-system/sw/bin:$PATH"
+                set -o pipefail
+                echo "=== $(date '+%Y-%m-%d %H:%M:%S') disk-cleanup ==="
+                df -h "$HOME" | tail -1
+                rc=0
+                nix-collect-garbage --delete-older-than 14d 2>&1 | tail -1 || rc=1
+                if command -v uv >/dev/null; then uv cache prune 2>&1 | tail -1 || rc=1; fi
+                if command -v pnpm >/dev/null; then pnpm store prune 2>&1 | tail -1 || rc=1; fi
+                df -h "$HOME" | tail -1
+                exit $rc
+              ''}"
+            ];
+            RunAtLoad = false;
+            # Sunday 12:30, after docker-prune; a missed run happens after wake.
+            StartCalendarInterval = [ { Weekday = 0; Hour = 12; Minute = 30; } ];
+            StandardOutPath = "/Users/${user}/Library/Logs/disk-cleanup.log";
+            StandardErrorPath = "/Users/${user}/Library/Logs/disk-cleanup.log";
             ProcessType = "Background";
             LowPriorityIO = true;
           };
