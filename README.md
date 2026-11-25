@@ -237,6 +237,17 @@ arrow both open atuin; the up arrow starts with the current terminal's session:
   with a literal value; such commands are never recorded. A value taken from a
   variable (`=$X`, `=$(...)`) is still recorded. `security.redact_patterns`
   holds the same patterns, but in 18.24.8 it does not affect shell history.
+- **Output capture** (`output.enabled`, `pty_proxy.enabled`): the first line
+  of `.zshrc` re-execs the shell under `atuin pty-proxy`, which marks each
+  command's output; the daemon stores it in atuin's data dir, on this machine
+  only (never synced), up to 1 MB per command and 5 GB in total, oldest
+  deleted first. In search, ctrl-o opens the inspector, Enter or `o` shows a
+  run's output; `atuin output search <text>` searches it, and agents can too
+  through MCP. Full-screen programs (vim, less, k9s) are skipped and progress
+  bars keep only their last frame. Credentials are redacted (`secrets_filter`),
+  and commands that print them (`gh auth token`, `kubectl get secret`, `cat
+  .env`, ...) store no output. zsh only; `zsh -c` and scripts are not proxied.
+  Experimental in atuin.
 - **Agent threads** (`threads.capture`): conversations of Claude Code, pi,
   codex and others are captured: `atuin threads search <text>`,
   `atuin threads show latest`, `atuin resume`. `atuin threads import` pulls in
