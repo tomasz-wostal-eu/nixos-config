@@ -123,7 +123,7 @@
   };
   ha-mcp = {
     command = "${pkgs.uv}/bin/uvx";
-    args = [ "ha-mcp==9.1.0" ];
+    args = [ "ha-mcp==9.3.0" ];
     env = {
       HOMEASSISTANT_URL = "http://192.168.1.208:8123";
       HOMEASSISTANT_TOKEN = "!cat \"$HOME/.config/home-assistant/token\"";
