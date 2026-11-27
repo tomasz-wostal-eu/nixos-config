@@ -42,6 +42,19 @@ let
 
   homeDir = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/twostal" else "/home/twostal";
 
+  # Structured workmux agent profiles, macOS only: the pi-clean runtime lives there.
+  # Spliced into the workmux config.yaml below at column 0 (the first line carries the
+  # splice's indent, which is why it is a comment); empty elsewhere.
+  workmuxAgents = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
+    # Structured profiles for `workmux add <branch> -a <name>`.
+    # `workmux add <branch> -a pi-factory` starts the pi-clean runtime (pi-factory
+    # package, jev/auto) instead of the default agent.
+    agents:
+      pi-factory:
+        type: pi
+        command: ${homeDir}/dev/pi-clean/pi
+  '';
+
   # Auto-tagging for notmuch, derived from what is actually in the mailbox:
   # 41k messages from 1045 sender domains, where the top 30 domains carry over
   # half the volume. Rules therefore key on domains, not on hand-listed
@@ -2420,15 +2433,7 @@ in
     #-------------------------------------------------------------------------------
 
     agent: claude
-
-    # Structured profiles for `workmux add <branch> -a <name>`.
-    # `workmux add <branch> -a pi-factory` starts the pi-clean runtime (pi-factory
-    # package, jev/auto) instead of the default agent.
-    agents:
-      pi-factory:
-        type: pi
-        command: ${homeDir}/dev/pi-clean/pi
-
+    ${workmuxAgents}
     # The default timeout is too short: this repo's build-switch alone took 50 minutes,
     # and an agent working longer than an hour is not abandoned.
     stale_after: 2h
@@ -2676,8 +2681,10 @@ in
 
     # Panes
 
-    Every subagent gets its own tmux pane and workmux sidebar entry automatically
-    (subagents-workmux.ts). Set `PI_AGENT_PANES=0` to turn that off.
+    Top-level subagents get their own tmux pane and workmux sidebar entry automatically
+    (subagents-workmux.ts), at most `PI_AGENT_PANES_MAX` (default 4) open at once. Agents
+    of a workflow get no pane; follow them in /agents → Workflows. Set `PI_AGENT_PANES=0`
+    to turn panes off.
   '';
 
   # pi-subagents run inside the pi process, so workmux (which tracks panes) never
@@ -2703,17 +2710,6 @@ in
   # workmux's own pi extension: reports working/waiting/done to the sidebar and counts
   # `suba:activity` (above). Written by `workmux setup` and extended by hand; now managed.
   ".pi/agent/extensions/workmux-status.ts".source = ./config/pi/workmux-status.ts;
-
-  # The pi-clean runtime (~/dev/pi-clean, PI_CODING_AGENT_DIR=~/dev/pi-clean/agent)
-  # gets the same workmux integration plus its declarative files. Only these are
-  # managed: settings.json, auth.json, mcp.json, mcp-auth.json, models-store.json,
-  # sessions/ and npm/ stay mutable because pi writes them. The pi binary itself is
-  # the npm install in ~/dev/pi-clean; moving it to Homebrew is deferred until the
-  # formula reaches >= 1.6.1.
-  "dev/pi-clean/agent/extensions/subagents-workmux.ts".source = ./config/pi/subagents-workmux.ts;
-  "dev/pi-clean/agent/extensions/workmux-status.ts".source = ./config/pi/workmux-status.ts;
-  "dev/pi-clean/agent/extensions/jev-router.ts".source = ./config/pi/jev-router.ts;
-  "dev/pi-clean/agent/subagents.json".source = ./config/pi/pi-clean-subagents.json;
 
   # One pane per subagent. Two modes:
   # - `pi-agent-pane <type>` (the `review` layout, one per reviewer) waits for pi to

@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-type Lifecycle = { id?: unknown; type?: unknown; workflowId?: unknown };
+type Lifecycle = { id?: unknown; type?: unknown; workflowId?: unknown; parentAgentId?: unknown };
 
 // Upper bound on dynamic panes open at once (PI_AGENT_PANES_MAX, default 4).
 const parsedMax = Number.parseInt(process.env.PI_AGENT_PANES_MAX ?? "", 10);
@@ -15,8 +15,12 @@ export default function (pi: ExtensionAPI) {
   let hasUI = false;
   // Most recent dynamic pane; the next one is split off it, so they stack.
   let lastPane: string | undefined;
-  // Ids of the dynamic panes this session opened and that may still exist.
+  // Ids of the dynamic panes opened so far that may still exist. Pruned against tmux
+  // before every open, so panes left over from a previous session age out by themselves.
   const openPanes = new Set<string>();
+  // Agents owned by a pi-subagents workflow: its children carry `workflowId`, and what
+  // they spawn carries only `parentAgentId`, so membership is inherited through it.
+  const workflowAgents = new Set<string>();
 
   const publish = () => pi.events.emit("suba:activity", { activeCount: running.size });
 
@@ -62,34 +66,44 @@ export default function (pi: ExtensionAPI) {
     return execFileSync("tmux", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
   }
 
+  // tmux 3.8 prints nothing and exits 0 for a pane that is gone, so only an exact
+  // echo of the id counts as alive.
+  function alive(paneId: string): boolean {
+    try {
+      return tmux("display", "-p", "-t", paneId, "#{pane_id}") === paneId;
+    } catch {
+      return false;
+    }
+  }
+
+  function inWorkflow(data: Lifecycle): boolean {
+    if (typeof data.id !== "string") return false;
+    if (workflowAgents.has(data.id)) return true;
+    if (
+      typeof data.workflowId === "string" ||
+      (typeof data.parentAgentId === "string" && workflowAgents.has(data.parentAgentId))
+    ) {
+      workflowAgents.add(data.id);
+      return true;
+    }
+    return false;
+  }
+
   function openPane(data: Lifecycle) {
     const origin = process.env.TMUX_PANE;
     if (!origin || !hasUI || !cwd || process.env.PI_AGENT_PANES === "0") return;
-    // Agents owned by a pi-subagents workflow are shown in its own workflow inspector;
-    // a fan-out would otherwise open one pane per child without limit.
-    if (typeof data.workflowId === "string") return;
+    // Agents owned by a pi-subagents workflow (and everything they spawn) are shown in
+    // its own workflow inspector; a fan-out would otherwise open one pane per child.
+    if (inWorkflow(data)) return;
     if (typeof data.id !== "string" || typeof data.type !== "string") return;
     if (!/^[\w.-]+$/.test(data.id) || !/^[\w.-]+$/.test(data.type)) return;
     if (claimed(data.type)) return;
     // Forget panes that have closed, then respect the cap.
-    for (const id of [...openPanes]) {
-      try {
-        tmux("display", "-p", "-t", id, "#{pane_id}");
-      } catch {
-        openPanes.delete(id);
-      }
-    }
+    for (const id of [...openPanes]) if (!alive(id)) openPanes.delete(id);
     if (openPanes.size >= MAX_PANES) return;
     try {
-      let below: string | undefined;
-      if (lastPane) {
-        try {
-          below = tmux("display", "-p", "-t", lastPane, "#{pane_id}");
-        } catch {
-          // The previous pane has closed; start a new column instead.
-        }
-      }
-      const place = below ? ["-v", "-t", below] : ["-h", "-l", "40%", "-t", origin];
+      // If the previous pane has closed, start a new column instead.
+      const place = lastPane && alive(lastPane) ? ["-v", "-t", lastPane] : ["-h", "-l", "40%", "-t", origin];
       lastPane = tmux(
         "split-window", "-d", ...place, "-P", "-F", "#{pane_id}", "-c", cwd,
         "pi-agent-pane", "--id", data.id,
@@ -107,7 +121,10 @@ export default function (pi: ExtensionAPI) {
       if (active) running.add(d.id);
       else running.delete(d.id);
       record(d, status);
-      if (event === "subagents:started") openPane(d);
+      if (event === "subagents:started") {
+        inWorkflow(d); // learn membership even when no pane is opened for it
+        openPane(d);
+      }
       publish();
     });
   }
@@ -115,8 +132,8 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     cwd = ctx.cwd;
     hasUI = ctx.hasUI;
-    lastPane = undefined;
-    openPanes.clear();
+    // lastPane and openPanes survive: they are validated against tmux when used.
+    workflowAgents.clear();
     running.clear();
   });
   // workmux-status asks once it has subscribed, in case agents already run.

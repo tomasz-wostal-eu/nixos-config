@@ -114,6 +114,19 @@ in
               fi
             done
           '';
+          # pi-clean's subagents.json is written by pi-subagents (/agents -> Settings),
+          # so it cannot be a read-only store link. Seed the defaults once, only when
+          # the file is missing and the runtime is installed; never overwrite.
+          activation.piCleanSubagentsSeed = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+            target="$HOME/dev/pi-clean/agent/subagents.json"
+            if [ -d "$HOME/dev/pi-clean/agent" ] && [ ! -e "$target" ] && [ ! -L "$target" ]; then
+              if [ -n "''${DRY_RUN:-}" ]; then
+                echo "pi-clean: would seed $target"
+              else
+                ${pkgs.coreutils}/bin/install -m 644 ${../shared/config/pi/pi-clean-subagents.json} "$target"
+              fi
+            fi
+          '';
           stateVersion = "23.11";
           shellAliases = shared.shellAliases;
           sessionPath = [ "$HOME/.local/bin" ];

@@ -35,4 +35,16 @@
     selection-background = 5b6078
     selection-foreground = cad3f5
   '';
+
+  # The pi-clean runtime (~/dev/pi-clean, PI_CODING_AGENT_DIR=~/dev/pi-clean/agent) gets
+  # the same workmux integration as ~/.pi/agent (shared/files.nix) plus its router.
+  # macOS only. Mutable on purpose, because pi writes them: settings.json, auth.json,
+  # mcp.json, mcp-auth.json, models-store.json, sessions/, npm/ and subagents.json
+  # (pi-subagents saves /agents -> Settings into it; seeded once from
+  # ../shared/config/pi/pi-clean-subagents.json by the piCleanSubagentsSeed activation
+  # in home-manager.nix). The pi binary itself is the npm install in ~/dev/pi-clean;
+  # moving it to Homebrew is deferred until the formula reaches >= 1.6.1.
+  "dev/pi-clean/agent/extensions/subagents-workmux.ts".source = ../shared/config/pi/subagents-workmux.ts;
+  "dev/pi-clean/agent/extensions/workmux-status.ts".source = ../shared/config/pi/workmux-status.ts;
+  "dev/pi-clean/agent/extensions/jev-router.ts".source = ../shared/config/pi/jev-router.ts;
 }
