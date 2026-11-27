@@ -1,0 +1,6 @@
+{
+  "fallbackSubagent": "none",
+  "maxConcurrent": 6,
+  "rememberAgents": true,
+  "outputTranscript": true
+}
