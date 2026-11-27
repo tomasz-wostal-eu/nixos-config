@@ -45,6 +45,9 @@ in
     brews = pkgs.callPackage ./brews.nix { };
     casks = pkgs.callPackage ./casks.nix { };
     onActivation = {
+      # Homebrew first: refresh formulae on every switch (wt, workmux, tea, gh ...).
+      autoUpdate = true;
+      upgrade = true;
       cleanup = "uninstall";
       # Homebrew 4.6+ requires an explicit flag when `brew bundle --cleanup`
       # would uninstall formulae/casks during non-interactive activation.

@@ -10,5 +10,8 @@ _:
   "stylelint"
   "watch"
   "timvw/tap/wt"
+  "workmux"
+  "tea"
+  "forgejo-cli"
   "yq"
 ]
