@@ -41,7 +41,6 @@ with pkgs;
   fzf
   gcalcli # Google Calendar CLI; needs own OAuth client -> `gcalcli init`
   gcc
-  gh
   git-bug # issues stored as git objects; rides to Codeberg over plain git refs
   gitleaks
   gnupg
@@ -190,9 +189,8 @@ with pkgs;
   sox
   cocoapods
   fjo
-  forgejo-cli
   git-wt
-  tea
+  # tea and forgejo-cli live in brews.nix (Homebrew first)
   tea-dash # gh-dash for Codeberg; reads tea's own login, see modules/shared/files.nix
   mkdocs
   google-cloud-sdk
