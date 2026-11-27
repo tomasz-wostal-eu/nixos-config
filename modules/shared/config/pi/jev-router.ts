@@ -242,7 +242,38 @@ function finish(ctx: ExtensionContext, model: Model<Api> | undefined, thinkingLe
 	return { model, thinkingLevel, state };
 }
 
+/**
+ * One live `jev/auto` registration per process. In-process subagent sessions share the parent's model
+ * runtime and load this extension too; a second registration would replace the parent's, and once the
+ * subagent session is disposed its extension context is stale, so every later `jev/auto` request of the
+ * parent would fail. The first live instance owns the registration; the others leave it alone.
+ */
+const OWNER = Symbol.for("pi-clean.jev-router.owner");
+type OwnerRecord = { pi?: ExtensionAPI };
+const ownerRecord = (): OwnerRecord => ((globalThis as Record<symbol, unknown>)[OWNER] ??= {}) as OwnerRecord;
+
+/** A disposed or reloaded session invalidates its API; `getMcpServers` asserts that and has no other effect. */
+function isStale(pi: ExtensionAPI): boolean {
+	try {
+		pi.getMcpServers();
+		return false;
+	} catch {
+		return true;
+	}
+}
+
 export default function (pi: ExtensionAPI) {
+	const owner = ownerRecord();
+	if (owner.pi && owner.pi !== pi && !isStale(owner.pi)) {
+		debug("jev/auto already registered by a live session, skipping");
+		return;
+	}
+	owner.pi = pi;
+	// Session replacement and /reload shut the old instance down before the new one loads.
+	pi.on("session_shutdown", () => {
+		if (owner.pi === pi) owner.pi = undefined;
+	});
+
 	pi.registerVirtualModel<State>({
 		provider: "jev",
 		id: "auto",
