@@ -42,6 +42,19 @@ let
 
   homeDir = if pkgs.stdenv.hostPlatform.isDarwin then "/Users/twostal" else "/home/twostal";
 
+  # Structured workmux agent profiles, macOS only: the pi-clean runtime lives there.
+  # Spliced into the workmux config.yaml below at column 0 (the first line carries the
+  # splice's indent, which is why it is a comment); empty elsewhere.
+  workmuxAgents = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
+    # Structured profiles for `workmux add <branch> -a <name>`.
+    # `workmux add <branch> -a pi-factory` starts the pi-clean runtime (pi-factory
+    # package, jev/auto) instead of the default agent.
+    agents:
+      pi-factory:
+        type: pi
+        command: ${homeDir}/dev/pi-clean/pi
+  '';
+
   # Auto-tagging for notmuch, derived from what is actually in the mailbox:
   # 41k messages from 1045 sender domains, where the top 30 domains carry over
   # half the volume. Rules therefore key on domains, not on hand-listed
@@ -2420,7 +2433,7 @@ in
     #-------------------------------------------------------------------------------
 
     agent: claude
-
+    ${workmuxAgents}
     # The default timeout is too short: this repo's build-switch alone took 50 minutes,
     # and an agent working longer than an hour is not abandoned.
     stale_after: 2h
@@ -2668,8 +2681,10 @@ in
 
     # Panes
 
-    Every subagent gets its own tmux pane and workmux sidebar entry automatically
-    (subagents-workmux.ts). Set `PI_AGENT_PANES=0` to turn that off.
+    Subagents started outside a workflow get their own tmux pane and workmux sidebar entry automatically
+    (subagents-workmux.ts), at most `PI_AGENT_PANES_MAX` (default 4) open at once. Agents
+    of a workflow get no pane; follow them in /agents → Workflows. Set `PI_AGENT_PANES=0`
+    to turn panes off.
   '';
 
   # pi-subagents run inside the pi process, so workmux (which tracks panes) never
@@ -2682,117 +2697,22 @@ in
   # - .workmux/agents/by-id/<id>.json carries the same payload plus the type. Every
   #   other subagent, in any pi session inside tmux, gets a pane of its own that
   #   follows it (`pi-agent-pane --id`), opened here on start. No pane when: there is
-  #   no tmux, pi has no UI (`pi -p`, e.g. dw-review --quick), PI_AGENT_PANES=0, or a
-  #   layout pane already follows that type (its pid in .workmux/agents/<type>.pane).
-  ".pi/agent/extensions/subagents-workmux.ts".text = ''
-    import { execFileSync } from "node:child_process";
-    import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-    import { join } from "node:path";
-    import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+  #   no tmux, pi has no UI (`pi -p`, e.g. dw-review --quick), PI_AGENT_PANES=0, a
+  #   layout pane already follows that type (its pid in .workmux/agents/<type>.pane),
+  #   or the agent belongs to a pi-subagents workflow (its children are shown in the
+  #   workflow inspector; a fan-out would open one pane per child). Dynamic panes are
+  #   capped at PI_AGENT_PANES_MAX open at once (default 4). State files and the
+  #   activity count still cover every agent, workflow children included, so workmux
+  #   keeps showing working while a workflow runs.
+  # Source: ./config/pi/subagents-workmux.ts.
+  ".pi/agent/extensions/subagents-workmux.ts".source = ./config/pi/subagents-workmux.ts;
 
-    type Lifecycle = { id?: unknown; type?: unknown };
-
-    export default function (pi: ExtensionAPI) {
-      const running = new Set<string>();
-      let cwd: string | undefined;
-      let hasUI = false;
-      // Most recent dynamic pane; the next one is split off it, so they stack.
-      let lastPane: string | undefined;
-
-      const publish = () => pi.events.emit("suba:activity", { activeCount: running.size });
-
-      function write(file: string, payload: object) {
-        writeFileSync(`''${file}.tmp`, JSON.stringify(payload));
-        renameSync(`''${file}.tmp`, file);
-      }
-
-      function record(data: Lifecycle, status: string) {
-        if (!cwd || typeof data.id !== "string" || typeof data.type !== "string") return;
-        if (!/^[\w.-]+$/.test(data.type) || !/^[\w.-]+$/.test(data.id)) return;
-        const manager = (globalThis as any)[Symbol.for("pi-subagents:manager")];
-        const rec = manager?.getRecord?.(data.id);
-        const payload = {
-          id: data.id,
-          status,
-          outputFile: rec?.outputFile,
-          updated: Date.now(),
-        };
-        try {
-          const dir = join(cwd, ".workmux", "agents");
-          mkdirSync(join(dir, "by-id"), { recursive: true });
-          write(join(dir, `''${data.type}.json`), payload);
-          write(join(dir, "by-id", `''${data.id}.json`), { ...payload, type: data.type });
-        } catch {
-          // A read-only or vanished worktree must not break the session.
-        }
-      }
-
-      // A layout pane (`pi-agent-pane <type>`) is alive while its claim file holds a live pid.
-      function claimed(type: string): boolean {
-        try {
-          const pid = parseInt(readFileSync(join(cwd!, ".workmux", "agents", `''${type}.pane`), "utf8"), 10);
-          if (!pid) return false;
-          process.kill(pid, 0);
-          return true;
-        } catch {
-          return false;
-        }
-      }
-
-      function tmux(...args: string[]): string {
-        return execFileSync("tmux", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-      }
-
-      function openPane(data: Lifecycle) {
-        const origin = process.env.TMUX_PANE;
-        if (!origin || !hasUI || !cwd || process.env.PI_AGENT_PANES === "0") return;
-        if (typeof data.id !== "string" || typeof data.type !== "string") return;
-        if (!/^[\w.-]+$/.test(data.id) || !/^[\w.-]+$/.test(data.type)) return;
-        if (claimed(data.type)) return;
-        try {
-          let below: string | undefined;
-          if (lastPane) {
-            try {
-              below = tmux("display", "-p", "-t", lastPane, "#{pane_id}");
-            } catch {
-              // The previous pane has closed; start a new column instead.
-            }
-          }
-          const place = below ? ["-v", "-t", below] : ["-h", "-l", "40%", "-t", origin];
-          lastPane = tmux(
-            "split-window", "-d", ...place, "-P", "-F", "#{pane_id}", "-c", cwd,
-            "pi-agent-pane", "--id", data.id,
-          );
-        } catch {
-          // No tmux server, no room for a split: the subagent still runs.
-        }
-      }
-
-      function on(event: string, status: string, active: boolean) {
-        pi.events.on(event, (data) => {
-          const d = (data ?? {}) as Lifecycle;
-          if (typeof d.id !== "string") return;
-          if (active) running.add(d.id);
-          else running.delete(d.id);
-          record(d, status);
-          if (event === "subagents:started") openPane(d);
-          publish();
-        });
-      }
-
-      pi.on("session_start", async (_event, ctx) => {
-        cwd = ctx.cwd;
-        hasUI = ctx.hasUI;
-        lastPane = undefined;
-        running.clear();
-      });
-      // workmux-status asks once it has subscribed, in case agents already run.
-      pi.events.on("suba:activity:request", publish);
-      on("subagents:started", "working", true);
-      on("subagents:completed", "done", false);
-      on("subagents:failed", "failed", false);
-    }
-  '';
+  # workmux's own pi extension: reports working/waiting/done to the sidebar and counts
+  # `suba:activity` (above). Written by `workmux setup` and extended by hand; now managed.
+  # Nix owns this file now (it began as `workmux setup` output, then grew by hand):
+  # change it in config/pi/workmux-status.ts and do not run `workmux setup --hooks`
+  # for pi, which would try to rewrite the store link.
+  ".pi/agent/extensions/workmux-status.ts".source = ./config/pi/workmux-status.ts;
 
   # One pane per subagent. Two modes:
   # - `pi-agent-pane <type>` (the `review` layout, one per reviewer) waits for pi to
