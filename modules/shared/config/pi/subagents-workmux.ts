@@ -133,7 +133,8 @@ export default function (pi: ExtensionAPI) {
     cwd = ctx.cwd;
     hasUI = ctx.hasUI;
     // lastPane and openPanes survive: they are validated against tmux when used.
-    workflowAgents.clear();
+    // workflowAgents survives too: a running workflow outlives /new, and its later
+    // descendants are recognised only through their parent chain.
     running.clear();
   });
   // workmux-status asks once it has subscribed, in case agents already run.

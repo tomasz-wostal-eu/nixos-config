@@ -2681,7 +2681,7 @@ in
 
     # Panes
 
-    Top-level subagents get their own tmux pane and workmux sidebar entry automatically
+    Subagents started outside a workflow get their own tmux pane and workmux sidebar entry automatically
     (subagents-workmux.ts), at most `PI_AGENT_PANES_MAX` (default 4) open at once. Agents
     of a workflow get no pane; follow them in /agents → Workflows. Set `PI_AGENT_PANES=0`
     to turn panes off.
@@ -2709,6 +2709,9 @@ in
 
   # workmux's own pi extension: reports working/waiting/done to the sidebar and counts
   # `suba:activity` (above). Written by `workmux setup` and extended by hand; now managed.
+  # Nix owns this file now (it began as `workmux setup` output, then grew by hand):
+  # change it in config/pi/workmux-status.ts and do not run `workmux setup --hooks`
+  # for pi, which would try to rewrite the store link.
   ".pi/agent/extensions/workmux-status.ts".source = ./config/pi/workmux-status.ts;
 
   # One pane per subagent. Two modes:
