@@ -13,6 +13,5 @@ _:
   "workmux"
   "tea"
   "forgejo-cli"
-  "gh"
   "yq"
 ]

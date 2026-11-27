@@ -326,7 +326,7 @@ is skipped rather than having its tasks closed. Token: `~/.config/codeberg/token
 A few binaries are installed by hand and are expected on `$PATH`:
 
 - `codex`, `claude`, `gemini`, `pi` — installed via packages / casks.
-  (`workmux` is no longer here: it is a flake input, see "Main session: Claude Code".)
+  (`workmux` is no longer here: it comes from Homebrew, `modules/darwin/brews.nix`.)
 - pi packages `pi-claude-bridge` and `@tintinweb/pi-subagents` (`pi install
   npm:<name>`; listed in the mutable `~/.pi/agent/settings.json`), and pi logins
   for Anthropic and OpenAI (`/login`, stored in `~/.pi/agent/auth.json`).
@@ -373,7 +373,7 @@ guardrails and cost CO-84). pi stays installed for now: PR review still runs in 
 | pi-mcp-adapter `approveTools = "destructive"` | `claude-guard` PreToolUse hook | `modules/shared/claude-code/claude-guard.py`, policy `guard-policy.json` |
 | nothing | Claude Code OTel to `https://otel.tailc90e09.ts.net` (DW-315) | `env` and `otelHeadersHelper` in `~/.claude/settings.json` |
 | `herdr` (package, config, hooks) | removed (CO-83); workmux hooks stay | `modules/shared/packages.nix`, `files.nix` |
-| `workmux` from `nix profile` | flake input `workmux`, pinned rev | `flake.nix`, `modules/darwin/packages.nix` |
+| `workmux` from `nix profile` | Homebrew formula, upgraded on switch | `modules/darwin/brews.nix` |
 
 `~/.claude.json` and `~/.claude/settings.json` are mutable (Claude Code, workmux,
 impeccable and gstack write to them), so Nix never replaces them. A home-manager
@@ -439,5 +439,6 @@ falls back to the stale token when `az` fails.
 
 ### Pins
 
-`flake.lock` pins `claude-code`, `codex` and `antigravity-cli` (nixpkgs) and `workmux`
-(its own input, rev in `flake.nix`). They move only with `nix flake update`.
+`flake.lock` pins `claude-code`, `codex` and `antigravity-cli` (nixpkgs). They move only with
+`nix flake update`. `workmux`, `wt`, `tea` and `forgejo-cli` come from Homebrew and are upgraded
+on every darwin switch (`homebrew.onActivation.upgrade`).

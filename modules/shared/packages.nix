@@ -190,7 +190,9 @@ with pkgs;
   cocoapods
   fjo
   git-wt
-  # tea and forgejo-cli live in brews.nix (Homebrew first)
+  # tea and forgejo-cli: Homebrew on macOS (modules/darwin/brews.nix), nixpkgs on Linux below.
+  # gh stays in nix on both: programs.gh (home-manager) installs it and its git credential
+  # helper points at the store path.
   tea-dash # gh-dash for Codeberg; reads tea's own login, see modules/shared/files.nix
   mkdocs
   google-cloud-sdk
@@ -201,6 +203,9 @@ with pkgs;
   steam
 ]
 ++ lib.optionals stdenv.hostPlatform.isLinux [
+  # Homebrew on macOS (modules/darwin/brews.nix).
+  forgejo-cli
+  tea
   # Homebrew equivalents available in nixpkgs for Linux.
   audacity
   brave

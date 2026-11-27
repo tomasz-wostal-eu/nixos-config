@@ -2372,8 +2372,8 @@ in
     }
   );
 
-  # workmux — shared settings. The binary comes from the `workmux` flake input
-  # (modules/darwin/packages.nix). Per-repo overrides stay in <repo>/.workmux.yaml.
+  # workmux — shared settings. The binary comes from Homebrew (modules/darwin/brews.nix,
+  # upgraded on every switch). Per-repo overrides stay in <repo>/.workmux.yaml.
   ".config/workmux/config.yaml".text = ''
     # workmux — global configuration.
     # Per-repo overrides: <repo>/.workmux.yaml (pattern: content-ops).
